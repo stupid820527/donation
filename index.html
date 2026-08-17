@@ -75,7 +75,7 @@ button{font:inherit}
 
 .box{border:1px solid var(--divider);border-radius:4px;padding:11px 12px;display:flex;align-items:center;gap:10px}
 .box .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.box .tag{font-size:11px;letter-spacing:.1em;color:var(--n500)}
+.box .tag,.fee .tag{font-size:11px;letter-spacing:.1em;color:var(--n500)}
 .amt{width:128px;flex:none;display:flex;flex-direction:column;gap:3px}
 .amt .tag{text-align:right}
 .amt-in{display:flex;align-items:center;gap:4px;border-bottom:1px solid rgba(32,31,29,.28)}
@@ -85,6 +85,18 @@ button{font:inherit}
 .qty .tag{text-align:right}
 .qty input{text-align:right;font-family:var(--num);font-size:18px;font-variant-numeric:tabular-nums;
   border-bottom:1px solid rgba(32,31,29,.28)}
+.fee{border:1px solid var(--divider);border-radius:4px;padding:11px 12px;display:flex;flex-direction:column;gap:8px}
+.fee.paid{border-color:var(--accent)}
+.fee-a{display:flex;align-items:center;gap:10px}
+.fee-b{display:flex;align-items:flex-end;gap:12px;padding-left:32px}
+.fee-f{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.fee-f input{border-bottom:1px solid rgba(32,31,29,.28)}
+.fee-f.wide{flex:1.4}
+.fee-f .amt-in input{text-align:left}
+.paid-t{flex:none;min-width:64px;min-height:44px;padding:0 10px;border:1px solid var(--divider);
+  border-radius:4px;background:transparent;cursor:pointer;font-family:var(--serif);font-size:14px;color:var(--danger)}
+.fee.paid .paid-t{color:var(--accent-700);border-color:var(--accent)}
+.paid-t:hover{background:rgba(32,31,29,.05)}
 .no{width:22px;flex:none;font-family:var(--num);font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
 .x{width:40px;height:48px;flex:none;border:none;background:transparent;cursor:pointer;color:var(--n400);
   display:flex;align-items:center;justify-content:center;border-radius:4px}
@@ -244,7 +256,7 @@ function seed(){
     trips:[{
       id:'t1', place:'楓港一日進香', date:'115.06.17',
       costs:DEFAULT_COSTS.map(function(c){return {name:c.name,amount:c.amount};}),
-      sponsors:[], going:[]
+      fees:[], feeDefault:1700, sponsors:[], going:[]
     }],
     roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}), pudu:[]
   };
@@ -259,6 +271,13 @@ function load(){
     if(raw){
       var d = JSON.parse(raw);
       if(d && d.trips && d.trips.length){
+        d.trips.forEach(function(t){
+          if(!t.fees) t.fees = [];
+          if(!t.feeDefault) t.feeDefault = 1700;
+          if(!t.sponsors) t.sponsors = [];
+          if(!t.going) t.going = [];
+          if(!t.costs) t.costs = [];
+        });
         base.trips = d.trips;
         base.currentId = d.currentId || d.trips[0].id;
       }
@@ -295,7 +314,11 @@ function trip(){
 function num(v){ var n = parseInt(String(v).replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; }
 function fmt(n){ return (Number(n)||0).toLocaleString('en-US'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-function income(t){ return t.sponsors.reduce(function(a,x){return a+num(x.amount);},0); }
+function feeDue(t){ return t.fees.reduce(function(a,x){return a+num(x.due);},0); }
+function feePaid(t){ return t.fees.reduce(function(a,x){return a + (x.paid ? num(x.due) : 0);},0); }
+function feeUnpaid(t){ return feeDue(t) - feePaid(t); }
+function sponsorTotal(t){ return t.sponsors.reduce(function(a,x){return a+num(x.amount);},0); }
+function income(t){ return feePaid(t) + sponsorTotal(t); }
 function costTotal(t){ return t.costs.reduce(function(a,x){return a+num(x.amount);},0); }
 function today(){
   var d = new Date();
@@ -347,13 +370,7 @@ function viewTrip(t){
     + '<input class="input num" data-f="date" value="'+esc(t.date)+'"></div>'
     + '</div>';
 
-  h += '<div class="summary">'
-    + '<div class="row"><span>收款總額</span><span class="big">NT$'+fmt(inc)+'</span></div>'
-    + '<div class="row"><span>支出總額</span><span class="num" style="font-size:20px">−'+fmt(cost)+'</span></div>'
-    + '<div class="rule"></div>'
-    + '<div class="row"><span style="color:var(--accent-700)">剩餘餘額</span>'
-    + '<span class="big bigger'+(bal<0?' neg':'')+'">'+(bal<0?'−NT$':'NT$')+fmt(Math.abs(bal))+'</span></div>'
-    + '</div>';
+  h += summaryHtml(t);
 
   h += '<div><div class="sec"><div class="sec-t">費用項目</div><div class="rule"></div><div class="sec-n">'+t.costs.length+' 項</div></div>'
     + '<div class="col">'
@@ -368,7 +385,34 @@ function viewTrip(t){
     + '</div>'
     + '<button class="btn btn-ghost btn-inline" data-add="costs" style="margin-top:10px">＋ 新增費用項目</button></div>';
 
-  h += '<div><div class="sec"><div class="sec-t">贊助名單</div><div class="rule"></div><div class="sec-n">'+t.sponsors.length+' 筆</div></div>'
+  h += '<div><div class="sec"><div class="sec-t">收費名單</div><div class="rule"></div>'
+    + '<div class="sec-n" data-fees-n>'+t.fees.length+' 人 · 未繳 '+t.fees.filter(function(x){return !x.paid;}).length+'</div></div>'
+    + '<div class="box" style="margin-bottom:10px">'
+    + '<div class="grow"><div class="tag">每人費用（預設）</div>'
+    + '<input class="input bare num" style="font-size:18px" inputmode="numeric" data-f="feeDefault" value="'+esc(t.feeDefault)+'"></div>'
+    + '<button class="btn btn-ghost" style="width:auto;min-height:44px;font-size:14px;border:1px solid var(--divider)" data-act="fillfees">從名冊帶入</button>'
+    + '</div>'
+    + '<div class="col">'
+    + (t.fees.length ? t.fees.map(function(x,i){
+        return '<div class="fee'+(x.paid?' paid':'')+'">'
+          + '<div class="fee-a">'
+          + '<div class="no">'+(i+1)+'</div>'
+          + '<div class="grow"><div class="tag">姓名</div>'
+          + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="fees" data-i="'+i+'" data-k="name" value="'+esc(x.name)+'"></div>'
+          + '<button class="paid-t" data-paid="'+i+'" aria-label="切換已繳">'+(x.paid?'已繳':'未繳')+'</button>'
+          + '<button class="x" data-del="fees" data-i="'+i+'" aria-label="刪除">'+X+'</button>'
+          + '</div>'
+          + '<div class="fee-b">'
+          + '<div class="fee-f"><div class="tag">桌號</div>'
+          + '<input class="input bare num" placeholder="—" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="table" value="'+esc(x.table)+'"></div>'
+          + '<div class="fee-f wide"><div class="tag">應繳</div><div class="amt-in"><span>NT$</span>'
+          + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="due" value="'+esc(x.due)+'"></div></div>'
+          + '</div></div>';
+      }).join('') : '<div class="muted">還沒有人登記收費。按「從名冊帶入」把勾選要去的人一次加進來，或單筆新增。</div>')
+    + '</div>'
+    + '<button class="btn btn-ghost btn-inline" data-add="fees" style="margin-top:10px">＋ 單筆新增</button></div>';
+
+  h += '<div><div class="sec"><div class="sec-t">隨喜贊助</div><div class="rule"></div><div class="sec-n">'+t.sponsors.length+' 筆</div></div>'
     + '<div class="col">'
     + (t.sponsors.length ? t.sponsors.map(function(s,i){
         return '<div class="box"><div class="no">'+(i+1)+'</div>'
@@ -395,9 +439,84 @@ function viewTrip(t){
   h += '<div class="col">'
     + '<button class="btn btn-secondary" data-act="sheet">匯出捐款表（列印檔）</button>'
     + '<button class="btn btn-secondary" data-act="insure">匯出保險名單 PDF</button>'
+    + '<button class="btn btn-secondary" data-act="excel">匯出 Excel（收費／收支／保險／普渡）</button>'
     + '</div>';
 
   return h + '</div>';
+}
+
+function summaryHtml(t){
+  var paid = feePaid(t), unpaid = feeUnpaid(t), spon = sponsorTotal(t);
+  var inc = income(t), cost = costTotal(t), bal = inc - cost;
+  return '<div class="summary">'
+    + '<div class="row"><span>收費已收</span><span class="num" data-sum="paid" style="font-size:20px">'+fmt(paid)+'</span></div>'
+    + '<div class="row"><span>尚未收齊</span><span class="num'+(unpaid>0?' neg':'')+'" data-sum="unpaid" style="font-size:20px">'+fmt(unpaid)+'</span></div>'
+    + '<div class="row"><span>隨喜贊助</span><span class="num" data-sum="spon" style="font-size:20px">'+fmt(spon)+'</span></div>'
+    + '<div class="rule"></div>'
+    + '<div class="row"><span>收款總額</span><span class="big" data-sum="inc">NT$'+fmt(inc)+'</span></div>'
+    + '<div class="row"><span>支出總額</span><span class="num" data-sum="cost" style="font-size:20px">−'+fmt(cost)+'</span></div>'
+    + '<div class="rule"></div>'
+    + '<div class="row"><span style="color:var(--accent-700)">剩餘餘額</span>'
+    + '<span class="big bigger'+(bal<0?' neg':'')+'" data-sum="bal">'+(bal<0?'−NT$':'NT$')+fmt(Math.abs(bal))+'</span></div>'
+    + '</div>';
+}
+
+function xesc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+function xcell(v, isNum){
+  if(isNum) return '<Cell ss:Type="Number"><Data ss:Type="Number">'+(num(v)||0)+'</Data></Cell>';
+  return '<Cell ss:Type="String"><Data ss:Type="String">'+xesc(v)+'</Data></Cell>';
+}
+function xrow(cells){ return '<Row>'+cells.join('')+'</Row>'; }
+function xsheet(name, rows){
+  return '<Worksheet ss:Name="'+xesc(name)+'"><Table>'+rows.join('')+'</Table></Worksheet>';
+}
+function downloadExcel(){
+  var t = trip();
+  var sheets = [];
+
+  var feeRows = [xrow([xcell('姓名'),xcell('桌號'),xcell('應繳'),xcell('已繳')])];
+  t.fees.forEach(function(x){
+    feeRows.push(xrow([xcell(x.name),xcell(x.table),xcell(x.due,true),xcell(x.paid?'已繳':'未繳')]));
+  });
+  feeRows.push(xrow([xcell('合計'),xcell(''),xcell(feeDue(t),true),xcell('已收 '+fmt(feePaid(t))+' / 未收 '+fmt(feeUnpaid(t)))]));
+  sheets.push(xsheet('收費名單', feeRows));
+
+  var sRows = [xrow([xcell('姓名'),xcell('隨喜金額')])];
+  t.sponsors.forEach(function(x){ sRows.push(xrow([xcell(x.name),xcell(x.amount,true)])); });
+  sRows.push(xrow([xcell('合計'),xcell(sponsorTotal(t),true)]));
+  sheets.push(xsheet('隨喜贊助', sRows));
+
+  var cRows = [xrow([xcell('費用項目'),xcell('金額')])];
+  t.costs.forEach(function(c){ cRows.push(xrow([xcell(c.name),xcell(c.amount,true)])); });
+  cRows.push(xrow([xcell('支出合計'),xcell(costTotal(t),true)]));
+  cRows.push(xrow([xcell(''),xcell('')]));
+  cRows.push(xrow([xcell('收款總額'),xcell(income(t),true)]));
+  cRows.push(xrow([xcell('剩餘餘額'),xcell(income(t)-costTotal(t),true)]));
+  sheets.push(xsheet('收支明細', cRows));
+
+  var g = goingPeople(t);
+  var iRows = [xrow([xcell('姓名'),xcell('出生年月日'),xcell('身分證字號')])];
+  g.forEach(function(p){ iRows.push(xrow([xcell(p.name),xcell(p.birth),xcell(p.id)])); });
+  sheets.push(xsheet('保險名單', iRows));
+
+  var pRows = [xrow([xcell('名子'),xcell('桌數'),xcell('普渡米（包）')])];
+  S.pudu.forEach(function(p){ pRows.push(xrow([xcell(p.name),xcell(p.tables,true),xcell(p.rice,true)])); });
+  pRows.push(xrow([xcell('合計'),
+    xcell(S.pudu.reduce(function(a,x){return a+num(x.tables);},0),true),
+    xcell(S.pudu.reduce(function(a,x){return a+num(x.rice);},0),true)]));
+  sheets.push(xsheet('普渡名單', pRows));
+
+  var xml = '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<?mso-application progid="Excel.Sheet"?>'
+    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+    + sheets.join('') + '</Workbook>';
+
+  var url = URL.createObjectURL(new Blob(['\ufeff'+xml], {type:'application/vnd.ms-excel'}));
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = (t.place||'出遊') + '-' + String(t.date).replace(/\./g,'') + '.xls';
+  link.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
 }
 
 function viewPudu(){
@@ -486,11 +605,19 @@ function viewSheet(t){
   var body = '<div class="sheet">'
     + '<div class="hd"><h3>聖義堂 出遊記帳表</h3>'
     + '<div class="sub">'+esc(t.place)+' · '+esc(t.date)+' · 隨行 '+goingPeople(t).length+' 位</div><div class="dash"></div></div>'
-    + '<div class="grp"><div class="lbl">贊助明細</div>'
+    + '<div class="grp"><div class="lbl">收費明細</div>'
+    + (t.fees.length ? t.fees.map(function(x){
+        return '<div class="sr"><span>'+esc(x.name||'—')+(x.table?'（'+esc(x.table)+'桌）':'')+'</span>'
+          + '<span class="num">'+fmt(x.due)+(x.paid?'':' 未繳')+'</span></div>';
+      }).join('') : '<div class="sr"><span style="color:var(--n600)">尚無收費</span><span class="num">0</span></div>')
+    + '<div class="sr sum"><span>應收 / 已收 / 未收</span><span class="num">'
+    + fmt(feeDue(t))+' / '+fmt(feePaid(t))+' / '+fmt(feeUnpaid(t))+'</span></div></div>'
+    + '<div class="grp"><div class="lbl">隨喜贊助</div>'
     + (t.sponsors.length ? t.sponsors.map(function(s){
         return '<div class="sr"><span>'+esc(s.name||'—')+'</span><span class="num">'+fmt(s.amount)+'</span></div>';
       }).join('') : '<div class="sr"><span style="color:var(--n600)">尚無贊助</span><span class="num">0</span></div>')
-    + '<div class="sr sum"><span>收款小計</span><span class="num">'+fmt(inc)+'</span></div></div>'
+    + '<div class="sr sum"><span>贊助小計</span><span class="num">'+fmt(sponsorTotal(t))+'</span></div>'
+    + '<div class="sr sum"><span>收款總額</span><span class="num">'+fmt(inc)+'</span></div></div>'
     + '<div class="grp"><div class="lbl">支出明細</div>'
     + t.costs.map(function(c){
         return '<div class="sr"><span>'+esc(c.name||'—')+'</span><span class="num">−'+fmt(c.amount)+'</span></div>';
@@ -546,11 +673,16 @@ function listOf(name){
 
 document.addEventListener('input', function(e){
   var el = e.target;
-  if(el.dataset.f){ trip()[el.dataset.f] = el.value; save(); return; }
+  if(el.dataset.f){
+    trip()[el.dataset.f] = el.value;
+    save();
+    if(el.dataset.f === 'feeDefault') return;
+    return;
+  }
   if(el.dataset.list){
     listOf(el.dataset.list)[+el.dataset.i][el.dataset.k] = el.value;
     save();
-    if(el.dataset.list === 'costs' || el.dataset.list === 'sponsors') refreshSummary();
+    if(el.dataset.list === 'costs' || el.dataset.list === 'sponsors' || el.dataset.list === 'fees') refreshSummary();
     if(el.dataset.list === 'pudu') refreshPudu();
   }
 });
@@ -558,13 +690,22 @@ document.addEventListener('input', function(e){
 function refreshSummary(){
   var box = document.querySelector('.summary');
   if(!box) return;
-  var t = trip(), inc = income(t), cost = costTotal(t), bal = inc - cost;
-  var rows = box.querySelectorAll('.row');
-  rows[0].lastElementChild.textContent = 'NT$' + fmt(inc);
-  rows[1].lastElementChild.textContent = '−' + fmt(cost);
-  var b = rows[2].lastElementChild;
-  b.textContent = (bal<0?'−NT$':'NT$') + fmt(Math.abs(bal));
-  b.className = 'big bigger' + (bal<0?' neg':'');
+  var t = trip(), unpaid = feeUnpaid(t), inc = income(t), cost = costTotal(t), bal = inc - cost;
+  function set(k,v){ var el = box.querySelector('[data-sum="'+k+'"]'); if(el) el.textContent = v; }
+  set('paid', fmt(feePaid(t)));
+  set('unpaid', fmt(unpaid));
+  set('spon', fmt(sponsorTotal(t)));
+  set('inc', 'NT$'+fmt(inc));
+  set('cost', '−'+fmt(cost));
+  var u = box.querySelector('[data-sum="unpaid"]');
+  if(u) u.className = 'num' + (unpaid>0?' neg':'');
+  var b = box.querySelector('[data-sum="bal"]');
+  if(b){
+    b.textContent = (bal<0?'−NT$':'NT$') + fmt(Math.abs(bal));
+    b.className = 'big bigger' + (bal<0?' neg':'');
+  }
+  var badge = document.querySelector('[data-fees-n]');
+  if(badge) badge.textContent = t.fees.length + ' 人 · 未繳 ' + t.fees.filter(function(x){return !x.paid;}).length;
 }
 function refreshPudu(){
   var tri = document.querySelector('.tri');
@@ -578,7 +719,7 @@ function refreshPudu(){
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -593,7 +734,8 @@ document.addEventListener('click', function(e){
 
   if(el.dataset.add){
     var nm = el.dataset.add;
-    if(nm === 'costs') trip().costs.push({name:'',amount:''});
+    if(nm === 'fees') trip().fees.push({name:'',table:'',due:trip().feeDefault,paid:false});
+    else if(nm === 'costs') trip().costs.push({name:'',amount:''});
     else if(nm === 'sponsors') trip().sponsors.push({name:'',amount:''});
     else if(nm === 'roster') S.roster.push({name:'',birth:'',id:''});
     else if(nm === 'pudu') S.pudu.push({name:'',tables:'',rice:''});
@@ -606,6 +748,12 @@ document.addEventListener('click', function(e){
     return;
   }
 
+  if(el.dataset.paid !== undefined){
+    var t2 = trip(), row = t2.fees[+el.dataset.paid];
+    row.paid = !row.paid;
+    save(); return render();
+  }
+
   if(el.dataset.del){ listOf(el.dataset.del).splice(+el.dataset.i,1); save(); return render(); }
 
   var a = el.dataset.act;
@@ -614,6 +762,19 @@ document.addEventListener('click', function(e){
   if(a === 'insure'){ S.screen = 'insure'; return render(); }
   if(a === 'pudusheet'){ S.screen = 'pudusheet'; return render(); }
   if(a === 'toroster'){ S.tab = 'roster'; S.screen = null; return render(); }
+
+  if(a === 'fillfees'){
+    var t3 = trip();
+    var names = t3.going.length ? t3.going : S.roster.map(function(r){return r.name;});
+    var have3 = {};
+    t3.fees.forEach(function(x){ have3[String(x.name).trim()] = true; });
+    names.forEach(function(n){
+      if(!have3[n]) t3.fees.push({name:n, table:'', due:t3.feeDefault, paid:false});
+    });
+    save(); return render();
+  }
+
+  if(a === 'excel'){ downloadExcel(); return; }
 
   if(a === 'fillroster'){
     var have2 = {};
@@ -644,9 +805,10 @@ document.addEventListener('click', function(e){
 
   if(a === 'newtrip'){
     var id = 't' + Date.now();
+    var prev = trip();
     S.trips.unshift({id:id, place:'', date:today(),
-      costs:DEFAULT_COSTS.map(function(c){return {name:c.name,amount:c.amount};}),
-      sponsors:[], going:[]});
+      costs:(prev && prev.costs.length ? prev.costs : DEFAULT_COSTS).map(function(c){return {name:c.name,amount:c.amount};}),
+      fees:[], feeDefault:(prev && prev.feeDefault) || 1700, sponsors:[], going:[]});
     S.currentId = id; S.tab = 'trip'; S.screen = null; save(); return render();
   }
 
