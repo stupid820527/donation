@@ -215,6 +215,7 @@ var ICON = {
 };
 var X = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>';
 
+var PUDU_SEED = [{"name":"聖義堂","boxes":2,"bags":4,"amount":4200,"paid":false},{"name":"鍾文龍","boxes":5,"bags":"","amount":8400,"paid":true},{"name":"黃美玲","boxes":5,"bags":"","amount":8400,"paid":true},{"name":"鍾立洋","boxes":5,"bags":"","amount":8400,"paid":true},{"name":"廖山津","boxes":1,"bags":4,"amount":2520,"paid":true},{"name":"黃玉林","boxes":1,"bags":4,"amount":2520,"paid":true},{"name":"廖瑛席","boxes":1,"bags":4,"amount":2520,"paid":true},{"name":"廖裴媗","boxes":1,"bags":4,"amount":2520,"paid":true},{"name":"邱顯富","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"鍾雅涵","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"繼威實業有限公司","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"蘇威領","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"黃雅玲","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"瑞銍國際有限公司","boxes":1,"bags":2,"amount":2100,"paid":false},{"name":"張淑慧","boxes":1,"bags":2,"amount":2100,"paid":false},{"name":"張僈怜","boxes":1,"bags":2,"amount":2100,"paid":false},{"name":"巫月桂","boxes":1,"bags":2,"amount":2100,"paid":false},{"name":"楊麗卿","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"陳美華","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"陳俊雄","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"林信女","boxes":1,"bags":2,"amount":2100,"paid":false},{"name":"許明鄰","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"黃麗孜","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"林建上","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"陳盈利","boxes":1,"bags":"","amount":1680,"paid":false},{"name":"陳育銓","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"楊英雯","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"羅文澤","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"許素卿","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"羅阡毓","boxes":1,"bags":"","amount":1680,"paid":true},{"name":"黃秀春","boxes":1,"bags":2,"amount":2100,"paid":false},{"name":"蘇建和","boxes":3,"bags":"","amount":5040,"paid":false},{"name":"許翠娥","boxes":3,"bags":"","amount":5040,"paid":false},{"name":"蘇郁涵","boxes":2,"bags":"","amount":3360,"paid":false},{"name":"萬事興業有限公司","boxes":4,"bags":"","amount":6720,"paid":false},{"name":"陳泓欽","boxes":3,"bags":"","amount":5040,"paid":false},{"name":"龔秋菊","boxes":3,"bags":"","amount":5040,"paid":false}];
 var DEFAULT_COSTS = [
   {name:'油香',amount:600},{name:'花籃水果',amount:1200},{name:'金紙',amount:800},
   {name:'紅包',amount:600},{name:'午餐',amount:2000},{name:'車資',amount:9000},{name:'保險',amount:1600}
@@ -274,7 +275,9 @@ function seed(){
       costs:DEFAULT_COSTS.map(function(c){return {name:c.name,amount:c.amount};}),
       fees:[], feeDefault:1700, sponsors:[], going:[]
     }],
-    roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}), pudu:[], puduName:'中元普渡', puduDate:'', updatedAt:0
+    roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}), pudu:PUDU_SEED.map(function(p){return {name:p.name,boxes:p.boxes,bags:p.bags,amount:p.amount,paid:p.paid};}),
+    puduName:'聖義堂普渡', puduDate:'115年國曆8/23農曆7/11', puduPrice:1680,
+    puduNote:'花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$', updatedAt:0
   };
 }
 
@@ -306,9 +309,16 @@ function load(){
         if(!cur){ base.roster.push({name:r.name,birth:r.birth,id:r.id}); have[r.name] = r; }
         else { if(!cur.birth && r.birth) cur.birth = r.birth; if(!cur.id && r.id) cur.id = r.id; }
       });
-      if(d && d.pudu) base.pudu = d.pudu;
+      if(d && d.pudu && d.pudu.length) base.pudu = d.pudu;
       if(d && d.puduName) base.puduName = d.puduName;
       if(d && d.puduDate) base.puduDate = d.puduDate;
+      if(d && d.puduPrice) base.puduPrice = d.puduPrice;
+      if(d && d.puduNote) base.puduNote = d.puduNote;
+      base.pudu.forEach(function(p){
+        if(p.tables !== undefined && p.boxes === undefined){ p.boxes = p.tables; p.bags = p.rice || ''; delete p.tables; delete p.rice; }
+        if(p.amount === undefined) p.amount = '';
+        if(p.paid === undefined) p.paid = false;
+      });
       base.updatedAt = Number(d && d.updatedAt) || 0;
     }
   }catch(e){}
@@ -317,7 +327,8 @@ function load(){
 
 function snapshot(){
   return {trips:S.trips, currentId:S.currentId, roster:S.roster,
-    pudu:S.pudu, puduName:S.puduName, puduDate:S.puduDate};
+    pudu:S.pudu, puduName:S.puduName, puduDate:S.puduDate,
+    puduPrice:S.puduPrice, puduNote:S.puduNote};
 }
 
 function save(silent){
@@ -424,6 +435,8 @@ function adopt(d){
   if(d.pudu) S.pudu = d.pudu;
   if(d.puduName !== undefined) S.puduName = d.puduName;
   if(d.puduDate !== undefined) S.puduDate = d.puduDate;
+  if(d.puduPrice !== undefined) S.puduPrice = d.puduPrice;
+  if(d.puduNote !== undefined) S.puduNote = d.puduNote;
   S.updatedAt = Number(d.updatedAt) || Date.now();
 }
 
@@ -644,6 +657,30 @@ var XSTYLES = '<Styles>'
   + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
   + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
   + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
+  + '<Style ss:ID="ptitle"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>'
+  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="28" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
+  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
+  + '<Style ss:ID="phead"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
+  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="16" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
+  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
+  + '<Style ss:ID="pcell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
+  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="20" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
+  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
+  + '<Style ss:ID="psmall"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
+  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="12" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
+  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
   + '</Styles>';
 
 function xdownload(sheets, filename){
@@ -660,28 +697,40 @@ function xdownload(sheets, filename){
 }
 
 function downloadPuduExcel(){
-  var rows = [xrow([xcell('編號'),xcell('名子'),xcell('桌數'),xcell('普渡米（包）')])];
-  S.pudu.forEach(function(p,i){ rows.push(xrow([xcell(i+1,true),xcell(p.name),xcell(p.tables,true),xcell(p.rice,true)])); });
-  rows.push(xrow([xcell(''),xcell('合計'),
-    xcell(S.pudu.reduce(function(a,x){return a+num(x.tables);},0),true),
-    xcell(S.pudu.reduce(function(a,x){return a+num(x.rice);},0),true)]));
-  xdownload([xsheet('普渡名單', rows)],
-    (S.puduName||'普渡') + (S.puduDate ? '-' + String(S.puduDate).replace(/\./g,'') : '') + '.xls');
+  var T = puduTotals();
+  var rows = [];
+  rows.push('<Row ht="72"><Cell ss:MergeAcross="3" ss:StyleID="ptitle"><Data ss:Type="String">'
+    + xesc((S.puduDate||'') + (S.puduName||'普渡') + (S.puduNote||'')) + '</Data></Cell></Row>');
+  rows.push('<Row ht="40">'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">姓名</Data></Cell>'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">白米(箱)</Data></Cell>'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">金額</Data></Cell>'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">已收</Data></Cell></Row>');
+  S.pudu.forEach(function(p){
+    var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
+    rows.push('<Row ht="50">'
+      + '<Cell ss:StyleID="pcell"><Data ss:Type="String">'+xesc(p.name||'')+'</Data></Cell>'
+      + '<Cell ss:StyleID="pcell"><Data ss:Type="String">'+xesc(puduQty(p) === '—' ? '' : puduQty(p))+'</Data></Cell>'
+      + '<Cell ss:StyleID="pcell"><Data ss:Type="String">'+xesc(fmt(amt)+'$')+'</Data></Cell>'
+      + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+(p.paid?'付清':'')+'</Data></Cell></Row>');
+  });
+  rows.push('<Row ht="50">'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc('合計 '+S.pudu.length+' 位')+'</Data></Cell>'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(T.boxes+'箱'+(T.bags?T.bags+'包':''))+'</Data></Cell>'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(fmt(T.due)+'$')+'</Data></Cell>'
+    + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+xesc('已收 '+fmt(T.paid))+'</Data></Cell></Row>');
+
+  var sheet = '<Worksheet ss:Name="普渡名單"><Table ss:DefaultRowHeight="50">'
+    + '<Column ss:Width="183"/><Column ss:Width="92"/><Column ss:Width="156"/><Column ss:Width="106"/>'
+    + rows.join('') + '</Table>'
+    + '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'
+    + '<Print><PaperSizeIndex>9</PaperSizeIndex><Scale>80</Scale></Print>'
+    + '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>2</SplitHorizontal><TopRowBottomPane>2</TopRowBottomPane>'
+    + '<ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
+
+  xdownload([sheet], (S.puduName||'普渡') + '名單.xls');
 }
 
-function rocTitle(t){
-  var d = String(t.date||'').split(/[.\/-]/);
-  var head = '';
-  if(d.length >= 3) head = num(d[0]) + '年' + num(d[1]) + '/' + num(d[2]) + ' ';
-  else if(t.date) head = t.date + ' ';
-  var p = String(t.place||'').trim();
-  if(!p) return head + '一日進香名單';
-  if(p.indexOf('名單') > -1) return head + p;
-  if(p.indexOf('進香') > -1) return head + p + '名單';
-  return head + p + '一日進香名單';
-}
-
-/* 依「宇宙出遊收費名單」原表格式輸出：左邊收費名單，右邊費用與贊助 */
 function downloadExcel(){
   var t = trip();
   var fees = t.fees, costs = t.costs, spons = t.sponsors;
@@ -788,7 +837,7 @@ function confirmPicker(){
   picked.forEach(function(n){
     if(_pickTarget === 'fees') t.fees.push({name:n, table:'', due:t.feeDefault, paid:false});
     else if(_pickTarget === 'going'){ if(t.going.indexOf(n) < 0) t.going.push(n); }
-    else if(_pickTarget === 'pudu') S.pudu.push({name:n, tables:'', rice:''});
+    else if(_pickTarget === 'pudu') S.pudu.push({name:n, boxes:'', bags:'', amount:'', paid:false});
   });
   closePicker(); save(); render();
 }
@@ -802,39 +851,72 @@ function syncRoster(name){
   save();
 }
 
+function puduAmount(p, price){
+  var pr = num(price || S.puduPrice) || 1680;
+  return num(p.boxes) * pr + num(p.bags) * (pr / 8);
+}
+function puduTotals(){
+  var boxes = 0, bags = 0, due = 0, paid = 0;
+  S.pudu.forEach(function(p){
+    boxes += num(p.boxes); bags += num(p.bags);
+    var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
+    due += amt;
+    if(p.paid) paid += amt;
+  });
+  return {boxes:boxes, bags:bags, due:due, paid:paid, unpaid:due - paid};
+}
+function puduQty(p){
+  var s = num(p.boxes) ? num(p.boxes) + '箱' : '';
+  if(num(p.bags)) s += num(p.bags) + '包';
+  return s || '—';
+}
+
 function viewPudu(){
-  var tables = S.pudu.reduce(function(a,x){return a+num(x.tables);},0);
-  var rice = S.pudu.reduce(function(a,x){return a+num(x.rice);},0);
+  var T = puduTotals();
   var h = '<div class="stack">';
   h += '<div class="col">'
     + '<div class="kicker">獨立活動 · 與出遊無關</div>'
     + '<div class="field"><label>活動名稱</label>'
-    + '<input class="input" data-p="puduName" placeholder="中元普渡" value="'+esc(S.puduName||'')+'" style="font-family:var(--display);font-size:27px;font-weight:500;min-height:56px"></div>'
-    + '<div class="field"><label>日期</label>'
-    + '<input class="input num" data-p="puduDate" placeholder="115.07.15" value="'+esc(S.puduDate)+'"></div>'
+    + '<input class="input" data-p="puduName" placeholder="聖義堂普渡" value="'+esc(S.puduName||'')+'" style="font-family:var(--display);font-size:27px;font-weight:500;min-height:56px"></div>'
+    + '<div class="field"><label>日期（國曆／農曆）</label>'
+    + '<input class="input" data-p="puduDate" placeholder="115年國曆8/23農曆7/11" value="'+esc(S.puduDate)+'"></div>'
+    + '<div class="field"><label>米種與規格（印在標題上）</label>'
+    + '<input class="input" data-p="puduNote" placeholder="花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$" value="'+esc(S.puduNote||'')+'"></div>'
+    + '<div class="field"><label>一箱單價（一包＝八分之一箱）</label>'
+    + '<input class="input num" inputmode="numeric" data-p="puduPrice" value="'+esc(S.puduPrice)+'"></div>'
     + '</div>';
-  h += '<div class="tri">'
-    + '<div><div class="lbl">登記人數</div><div class="big">'+S.pudu.length+'</div></div>'
-    + '<div><div class="lbl">總桌數</div><div class="big">'+tables+'</div></div>'
-    + '<div><div class="lbl">普渡米</div><div class="big">'+rice+' 包</div></div>'
+  h += '<div class="summary">'
+    + '<div class="row"><span>登記人數</span><span class="num" data-pd="n" style="font-size:20px">'+S.pudu.length+'</span></div>'
+    + '<div class="row"><span>白米合計</span><span class="num" data-pd="qty" style="font-size:20px">'+T.boxes+' 箱 '+T.bags+' 包</span></div>'
+    + '<div class="rule"></div>'
+    + '<div class="row"><span>金額合計</span><span class="big" data-pd="due">NT$'+fmt(T.due)+'</span></div>'
+    + '<div class="row"><span>已收</span><span class="num" data-pd="paid" style="font-size:20px">'+fmt(T.paid)+'</span></div>'
+    + '<div class="row"><span>尚未收齊</span><span class="num'+(T.unpaid>0?' neg':'')+'" data-pd="unpaid" style="font-size:20px">'+fmt(T.unpaid)+'</span></div>'
     + '</div>';
   h += '<div class="col">'
     + (S.pudu.length ? S.pudu.map(function(p,i){
-        return '<div class="box"><div class="no">'+(i+1)+'</div>'
-          + '<div class="grow"><div class="tag">名子</div>'
+        var auto = puduAmount(p);
+        return '<div class="fee'+(p.paid?' paid':'')+'">'
+          + '<div class="fee-a"><div class="no">'+(i+1)+'</div>'
+          + '<div class="grow"><div class="tag">姓名</div>'
           + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="pudu" data-i="'+i+'" data-k="name" value="'+esc(p.name)+'"></div>'
-          + '<div class="qty"><div class="tag">桌數</div>'
-          + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="tables" value="'+esc(p.tables)+'"></div>'
-          + '<div class="qty"><div class="tag">米（包）</div>'
-          + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="rice" value="'+esc(p.rice)+'"></div>'
-          + '<button class="x" data-del="pudu" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>';
+          + '<button class="paid-t" data-pudupaid="'+i+'" aria-label="切換已收">'+(p.paid?'付清':'未收')+'</button>'
+          + '<button class="x" data-del="pudu" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>'
+          + '<div class="fee-b">'
+          + '<div class="fee-f"><div class="tag">白米（箱）</div>'
+          + '<input class="input bare num" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="boxes" value="'+esc(p.boxes)+'"></div>'
+          + '<div class="fee-f"><div class="tag">零包</div>'
+          + '<input class="input bare num" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="bags" value="'+esc(p.bags)+'"></div>'
+          + '<div class="fee-f wide"><div class="tag">金額（空白＝自動 '+fmt(auto)+'）</div><div class="amt-in"><span>NT$</span>'
+          + '<input class="input bare" placeholder="'+fmt(auto)+'" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="amount" value="'+esc(p.amount)+'"></div></div>'
+          + '</div></div>';
       }).join('') : '<div class="muted">還沒有人登記普渡。</div>')
     + '</div>';
   h += '<div class="col">'
     + '<div class="btn-row"><button class="btn btn-primary" data-add="pudu">＋ 新增一位</button>'
     + '<button class="btn btn-secondary" data-act="fillpudu">從名冊挑選</button></div>'
     + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印檔）</button>'
-    + '<button class="btn btn-secondary" data-act="puduexcel">匯出普渡 Excel</button></div>';
+    + '<button class="btn btn-secondary" data-act="puduexcel">匯出普渡 Excel（原表格式）</button></div>';
   return h + '</div>';
 }
 
@@ -972,19 +1054,25 @@ function viewInsure(t){
 }
 
 function viewPuduSheet(){
-  var tables = S.pudu.reduce(function(a,x){return a+num(x.tables);},0);
-  var rice = S.pudu.reduce(function(a,x){return a+num(x.rice);},0);
+  var T = puduTotals();
   var body = '<div class="sheet">'
-    + '<div class="hd"><h3>聖義堂 '+esc(S.puduName||'普渡')+' 名單</h3>'
-    + '<div class="sub">'+(S.puduDate?esc(S.puduDate)+' · ':'')+'共 '+S.pudu.length+' 位 · '+tables+' 桌 · 普渡米 '+rice+' 包</div><div class="dash"></div></div>'
-    + '<div class="thead"><div class="c-no">＃</div><div style="flex:1">名子</div><div class="c-r">桌數</div><div class="c-r">米（包）</div></div>'
-    + S.pudu.map(function(p,i){
-        return '<div class="trow"><div class="c-no">'+(i+1)+'</div><div style="flex:1;font-weight:500">'+esc(p.name||'—')+'</div>'
-          + '<div class="c-r">'+esc(p.tables||0)+'</div><div class="c-r">'+esc(p.rice||0)+'</div></div>';
+    + '<div class="hd"><h3 style="font-size:24px;line-height:1.35">'
+    + esc(S.puduDate||'') + esc(S.puduName||'普渡') + esc(S.puduNote||'')
+    + '</h3><div class="dash"></div></div>'
+    + '<div class="thead"><div style="flex:1.6">姓名</div><div class="c-r" style="width:84px">白米(箱)</div>'
+    + '<div class="c-r" style="width:132px">金額</div><div class="c-r" style="width:64px">已收</div></div>'
+    + S.pudu.map(function(p){
+        var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
+        return '<div class="trow"><div style="flex:1.6;font-weight:500">'+esc(p.name||'—')+'</div>'
+          + '<div class="c-r" style="width:84px">'+esc(puduQty(p))+'</div>'
+          + '<div class="c-r" style="width:132px">'+fmt(amt)+'$</div>'
+          + '<div class="c-r" style="width:64px'+(p.paid?'':';color:var(--danger)')+'">'+(p.paid?'付清':'—')+'</div></div>';
       }).join('')
-    + '<div class="trow" style="border-bottom:none"><div class="c-no"></div><div style="flex:1;color:var(--n700)">合計</div>'
-    + '<div class="c-r" style="font-weight:500">'+tables+'</div><div class="c-r" style="font-weight:500">'+rice+'</div></div>'
-    + '<div class="foot">製表 '+today()+' · 聖義堂班長</div></div>';
+    + '<div class="trow" style="border-bottom:none"><div style="flex:1.6;color:var(--n700)">合計 '+S.pudu.length+' 位</div>'
+    + '<div class="c-r" style="width:84px;font-weight:500">'+T.boxes+'箱'+(T.bags?T.bags+'包':'')+'</div>'
+    + '<div class="c-r" style="width:132px;font-weight:500">'+fmt(T.due)+'$</div>'
+    + '<div class="c-r" style="width:64px">'+fmt(T.paid)+'</div></div>'
+    + '<div class="foot">製表 '+today()+' · 聖義堂班長 · 未收 '+fmt(T.unpaid)+'$</div></div>';
   return '<div class="stack">' + backBtn() + body
     + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
 }
@@ -1035,18 +1123,21 @@ function refreshSummary(){
   if(badge) badge.textContent = t.fees.length + ' 人 · 未繳 ' + t.fees.filter(function(x){return !x.paid;}).length;
 }
 function refreshPudu(){
-  var tri = document.querySelector('.tri');
-  if(!tri) return;
-  var tables = S.pudu.reduce(function(a,x){return a+num(x.tables);},0);
-  var rice = S.pudu.reduce(function(a,x){return a+num(x.rice);},0);
-  var vals = tri.querySelectorAll('.big');
-  vals[0].textContent = S.pudu.length;
-  vals[1].textContent = tables;
-  vals[2].textContent = rice + ' 包';
+  var box = document.querySelector('.summary');
+  if(!box) return;
+  var T = puduTotals();
+  function set(k,v){ var el = box.querySelector('[data-pd="'+k+'"]'); if(el) el.textContent = v; }
+  set('n', S.pudu.length);
+  set('qty', T.boxes + ' 箱 ' + T.bags + ' 包');
+  set('due', 'NT$' + fmt(T.due));
+  set('paid', fmt(T.paid));
+  set('unpaid', fmt(T.unpaid));
+  var u = box.querySelector('[data-pd="unpaid"]');
+  if(u) u.className = 'num' + (T.unpaid > 0 ? ' neg' : '');
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -1065,7 +1156,7 @@ document.addEventListener('click', function(e){
     else if(nm === 'costs') trip().costs.push({name:'',amount:''});
     else if(nm === 'sponsors') trip().sponsors.push({name:'',amount:''});
     else if(nm === 'roster') S.roster.push({name:'',birth:'',id:''});
-    else if(nm === 'pudu') S.pudu.push({name:'',tables:'',rice:''});
+    else if(nm === 'pudu') S.pudu.push({name:'',boxes:'',bags:'',amount:'',paid:false});
     save(); render();
     var fields = document.querySelectorAll('[data-list="'+nm+'"][data-k="name"]');
     if(fields.length){
@@ -1075,6 +1166,17 @@ document.addEventListener('click', function(e){
       var top = box.getBoundingClientRect().top + window.pageYOffset - 72;
       window.scrollTo(0, Math.max(0, top));
     }
+    return;
+  }
+
+  if(el.dataset.pudupaid !== undefined){
+    var pr = S.pudu[+el.dataset.pudupaid];
+    pr.paid = !pr.paid;
+    save();
+    el.textContent = pr.paid ? '付清' : '未收';
+    var w = el.closest('.fee');
+    if(w) w.className = 'fee' + (pr.paid ? ' paid' : '');
+    refreshPudu();
     return;
   }
 
@@ -1168,7 +1270,8 @@ document.addEventListener('click', function(e){
 
   if(a === 'export'){
     var data = JSON.stringify({v:2, trips:S.trips, roster:S.roster, pudu:S.pudu,
-      puduName:S.puduName, puduDate:S.puduDate}, null, 2);
+      puduName:S.puduName, puduDate:S.puduDate,
+      puduPrice:S.puduPrice, puduNote:S.puduNote}, null, 2);
     var url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
     var link = document.createElement('a');
     link.href = url;
@@ -1197,6 +1300,8 @@ document.addEventListener('change', function(e){
       if(d.pudu) S.pudu = d.pudu;
       if(d.puduName) S.puduName = d.puduName;
       if(d.puduDate) S.puduDate = d.puduDate;
+      if(d.puduPrice) S.puduPrice = d.puduPrice;
+      if(d.puduNote) S.puduNote = d.puduNote;
       save(); render();
     }catch(err){
       var m = document.getElementById('importmsg');
