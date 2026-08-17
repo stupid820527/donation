@@ -205,7 +205,8 @@ button{font:inherit}
 "use strict";
 var KEY = 'shengyi-ledger-v2';
 var URLKEY = 'shengyi-cloud-url';
-var CLOUD = { url: (localStorage.getItem(URLKEY) || ''), busy:false, msg:'', pending:false, timer:null };
+var CLOUD_DEFAULT = 'https://script.google.com/macros/s/AKfycbwrZOVOoEqt3rNMi36oVM9qEU2B_YJMh2J6j1KOZ7wLhutiqqRZk-7cYiteStG9Wdvh/exec';
+var CLOUD = { url: (localStorage.getItem(URLKEY) || CLOUD_DEFAULT), busy:false, msg:'', pending:false, timer:null };
 
 var ICON = {
   trip:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
@@ -275,10 +276,26 @@ function seed(){
       costs:DEFAULT_COSTS.map(function(c){return {name:c.name,amount:c.amount};}),
       fees:[], feeDefault:1700, sponsors:[], going:[]
     }],
-    roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}), pudu:PUDU_SEED.map(function(p){return {name:p.name,boxes:p.boxes,bags:p.bags,amount:p.amount,paid:p.paid};}),
-    puduName:'聖義堂普渡', puduDate:'115年國曆8/23農曆7/11', puduPrice:1680,
-    puduNote:'花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$', updatedAt:0
+    roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}),
+    puduEvents:[{
+      id:'p115', year:'115', name:'聖義堂普渡', date:'國曆8/23農曆7/11', price:1680,
+      note:'花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$',
+      rows:PUDU_SEED.map(function(p){return {name:p.name,boxes:p.boxes,bags:p.bags,amount:p.amount,paid:p.paid};})
+    }],
+    puduId:'p115', showCloudUrl:false, updatedAt:0
   };
+}
+
+function guessYear(s){
+  var m = String(s||'').match(/(\d{3})/);
+  return m ? m[1] : '';
+}
+
+function pud(){
+  var e = null;
+  S.puduEvents.forEach(function(x){ if(String(x.id) === String(S.puduId)) e = x; });
+  if(!e) e = S.puduEvents[0];
+  return e;
 }
 
 var S = load();
@@ -309,15 +326,28 @@ function load(){
         if(!cur){ base.roster.push({name:r.name,birth:r.birth,id:r.id}); have[r.name] = r; }
         else { if(!cur.birth && r.birth) cur.birth = r.birth; if(!cur.id && r.id) cur.id = r.id; }
       });
-      if(d && d.pudu && d.pudu.length) base.pudu = d.pudu;
-      if(d && d.puduName) base.puduName = d.puduName;
-      if(d && d.puduDate) base.puduDate = d.puduDate;
-      if(d && d.puduPrice) base.puduPrice = d.puduPrice;
-      if(d && d.puduNote) base.puduNote = d.puduNote;
-      base.pudu.forEach(function(p){
-        if(p.tables !== undefined && p.boxes === undefined){ p.boxes = p.tables; p.bags = p.rice || ''; delete p.tables; delete p.rice; }
-        if(p.amount === undefined) p.amount = '';
-        if(p.paid === undefined) p.paid = false;
+      if(d && d.puduEvents && d.puduEvents.length){
+        base.puduEvents = d.puduEvents;
+        base.puduId = d.puduId || d.puduEvents[0].id;
+      }else if(d && d.pudu && d.pudu.length){
+        base.puduEvents = [{
+          id:'p'+(d.puduYear || '115'), year:String(d.puduYear || guessYear(d.puduDate) || '115'),
+          name:d.puduName || '聖義堂普渡',
+          date:String(d.puduDate || '').replace(/^\s*\d{3}\s*年\s*/, ''), price:d.puduPrice || 1680,
+          note:d.puduNote || '', rows:d.pudu
+        }];
+        base.puduId = base.puduEvents[0].id;
+      }
+      base.puduEvents.forEach(function(ev){
+        if(!ev.rows) ev.rows = [];
+        if(!ev.year) ev.year = String(guessYear(ev.date) || '115');
+        ev.date = String(ev.date || '').replace(/^\s*\d{3}\s*年\s*/, '');
+        if(!ev.price) ev.price = 1680;
+        ev.rows.forEach(function(p){
+          if(p.tables !== undefined && p.boxes === undefined){ p.boxes = p.tables; p.bags = p.rice || ''; delete p.tables; delete p.rice; }
+          if(p.amount === undefined) p.amount = '';
+          if(p.paid === undefined) p.paid = false;
+        });
       });
       base.updatedAt = Number(d && d.updatedAt) || 0;
     }
@@ -327,8 +357,7 @@ function load(){
 
 function snapshot(){
   return {trips:S.trips, currentId:S.currentId, roster:S.roster,
-    pudu:S.pudu, puduName:S.puduName, puduDate:S.puduDate,
-    puduPrice:S.puduPrice, puduNote:S.puduNote};
+    puduEvents:S.puduEvents, puduId:S.puduId};
 }
 
 function save(silent){
@@ -432,11 +461,10 @@ function adopt(d){
     S.currentId = d.currentId || d.trips[0].id;
   }
   if(d.roster) S.roster = d.roster;
-  if(d.pudu) S.pudu = d.pudu;
-  if(d.puduName !== undefined) S.puduName = d.puduName;
-  if(d.puduDate !== undefined) S.puduDate = d.puduDate;
-  if(d.puduPrice !== undefined) S.puduPrice = d.puduPrice;
-  if(d.puduNote !== undefined) S.puduNote = d.puduNote;
+  if(d.puduEvents && d.puduEvents.length){
+    S.puduEvents = d.puduEvents;
+    if(!S.puduEvents.some(function(x){ return String(x.id) === String(S.puduId); })) S.puduId = S.puduEvents[0].id;
+  }
   S.updatedAt = Number(d.updatedAt) || Date.now();
 }
 
@@ -449,7 +477,7 @@ function updateCloudBox(){
   var el = document.getElementById('cloudmsg');
   if(el) el.textContent = CLOUD.msg;
   var dot = document.getElementById('clouddot');
-  if(dot) dot.textContent = CLOUD.url ? '已連結試算表' : '尚未連結（資料只存這台）';
+  if(dot) dot.textContent = CLOUD.url ? '已連結共用試算表 · 自動同步' : '未連結';
 }
 
 function trip(){
@@ -520,6 +548,22 @@ function viewTrip(t){
     + '<input class="input num" data-f="date" value="'+esc(t.date)+'"></div>'
     + '</div>';
 
+  h += '<div><div class="sec"><div class="sec-t">誰要去</div><div class="rule"></div>'
+    + '<div class="sec-n">'+going.length+' 位</div></div>'
+    + '<div class="col">'
+    + (going.length ? going.map(function(r){
+        var lack = (!r.birth || !r.id);
+        return '<div class="box">'
+          + '<div class="grow"><div class="nm">'+esc(r.name)+'</div>'
+          + '<div class="mt"'+(lack?' style="color:var(--danger)"':'')+'>'
+          + esc(r.birth||'缺生日') + ' · ' + esc(r.id||'缺身分證') + '</div></div>'
+          + '<button class="x" data-ungo="'+esc(r.name)+'" aria-label="移除">'+X+'</button></div>';
+      }).join('') : '<div class="muted">還沒有人。按下面「從名冊挑選」勾選這次要去的人。</div>')
+    + '</div>'
+    + '<div class="btn-row" style="margin-top:10px">'
+    + '<button class="btn btn-secondary" data-act="fillgoing">從名冊挑選</button>'
+    + '<button class="btn btn-ghost" style="border:1px solid var(--divider)" data-act="toroster">管理名冊</button></div></div>';
+
   h += summaryHtml(t);
 
   h += '<div><div class="sec"><div class="sec-t">費用項目</div><div class="rule"></div><div class="sec-n">'+t.costs.length+' 項</div></div>'
@@ -575,19 +619,7 @@ function viewTrip(t){
     + '</div>'
     + '<button class="btn btn-primary" data-add="sponsors" style="margin-top:12px">＋ 新增贊助（姓名＋金額）</button></div>';
 
-  h += '<div><div class="sec"><div class="sec-t">誰要去</div><div class="rule"></div><div class="sec-n">'+going.length+' / '+S.roster.length+' 位</div></div>'
-    + '<div class="col">'
-    + (S.roster.length ? S.roster.map(function(r){
-        var on = t.going.indexOf(r.name) > -1;
-        return '<button class="pick'+(on?' on':'')+'" data-go="'+esc(r.name)+'">'
-          + '<span><span class="nm">'+esc(r.name)+'</span><br><span class="mt">'+esc(r.birth||'—')+' · '+esc(r.id||'—')+'</span></span>'
-          + '<span class="mark"></span></button>';
-      }).join('') : '<div class="muted">名冊還是空的。先到「名冊」分頁新增人員，這裡才能勾選誰要去。</div>')
-    + '</div>'
-    + '<button class="btn btn-ghost btn-inline" data-act="toroster" style="margin-top:10px">管理名冊</button></div>';
-
   h += '<div class="col">'
-    + '<button class="btn btn-secondary" data-act="sheet">匯出捐款表（列印檔）</button>'
     + '<button class="btn btn-secondary" data-act="insure">匯出保險名單 PDF</button>'
     + '<button class="btn btn-secondary" data-act="excel">匯出收費名單 Excel（原表格式）</button>'
     + '</div>';
@@ -681,6 +713,12 @@ var XSTYLES = '<Styles>'
   + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
   + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
   + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
+  + '<Style ss:ID="pcellS"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
+  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="13" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
+  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
+  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
   + '</Styles>';
 
 function xdownload(sheets, filename){
@@ -699,36 +737,40 @@ function xdownload(sheets, filename){
 function downloadPuduExcel(){
   var T = puduTotals();
   var rows = [];
-  rows.push('<Row ht="72"><Cell ss:MergeAcross="3" ss:StyleID="ptitle"><Data ss:Type="String">'
-    + xesc((S.puduDate||'') + (S.puduName||'普渡') + (S.puduNote||'')) + '</Data></Cell></Row>');
+  var n = pud().rows.length;
+  var rh = n > 44 ? 22 : (n > 34 ? 27 : (n > 26 ? 34 : 50));
+  var big = n > 34 ? 'pcellS' : 'pcell';
+  rows.push('<Row ht="'+(n>34?52:72)+'"><Cell ss:MergeAcross="3" ss:StyleID="ptitle"><Data ss:Type="String">'
+    + xesc(puduTitle()) + '</Data></Cell></Row>');
   rows.push('<Row ht="40">'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">姓名</Data></Cell>'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">白米(箱)</Data></Cell>'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">金額</Data></Cell>'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">已收</Data></Cell></Row>');
-  S.pudu.forEach(function(p){
+  pud().rows.forEach(function(p){
     var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
-    rows.push('<Row ht="50">'
-      + '<Cell ss:StyleID="pcell"><Data ss:Type="String">'+xesc(p.name||'')+'</Data></Cell>'
-      + '<Cell ss:StyleID="pcell"><Data ss:Type="String">'+xesc(puduQty(p) === '—' ? '' : puduQty(p))+'</Data></Cell>'
-      + '<Cell ss:StyleID="pcell"><Data ss:Type="String">'+xesc(fmt(amt)+'$')+'</Data></Cell>'
+    rows.push('<Row ht="'+rh+'">'
+      + '<Cell ss:StyleID="'+big+'"><Data ss:Type="String">'+xesc(p.name||'')+'</Data></Cell>'
+      + '<Cell ss:StyleID="'+big+'"><Data ss:Type="String">'+xesc(puduQty(p) === '—' ? '' : puduQty(p))+'</Data></Cell>'
+      + '<Cell ss:StyleID="'+big+'"><Data ss:Type="String">'+xesc(fmt(amt)+'$')+'</Data></Cell>'
       + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+(p.paid?'付清':'')+'</Data></Cell></Row>');
   });
-  rows.push('<Row ht="50">'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc('合計 '+S.pudu.length+' 位')+'</Data></Cell>'
+  rows.push('<Row ht="'+rh+'">'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc('合計 '+pud().rows.length+' 位')+'</Data></Cell>'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(T.boxes+'箱'+(T.bags?T.bags+'包':''))+'</Data></Cell>'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(fmt(T.due)+'$')+'</Data></Cell>'
     + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+xesc('已收 '+fmt(T.paid))+'</Data></Cell></Row>');
 
-  var sheet = '<Worksheet ss:Name="普渡名單"><Table ss:DefaultRowHeight="50">'
+  var sheet = '<Worksheet ss:Name="'+xesc((pud().year||'')+'年普渡')+'"><Table ss:DefaultRowHeight="'+rh+'">'
     + '<Column ss:Width="183"/><Column ss:Width="92"/><Column ss:Width="156"/><Column ss:Width="106"/>'
     + rows.join('') + '</Table>'
     + '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'
-    + '<Print><PaperSizeIndex>9</PaperSizeIndex><Scale>80</Scale></Print>'
+    + '<PageSetup><PageMargins x:Bottom="0.25" x:Left="0.25" x:Right="0.25" x:Top="0.25" xmlns:x="urn:schemas-microsoft-com:office:excel"/></PageSetup>'
+    + '<Print><ValidPrinterInfo/><PaperSizeIndex>9</PaperSizeIndex><FitWidth>1</FitWidth><FitHeight>1</FitHeight><FitToPage/></Print>'
     + '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>2</SplitHorizontal><TopRowBottomPane>2</TopRowBottomPane>'
     + '<ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
 
-  xdownload([sheet], (S.puduName||'普渡') + '名單.xls');
+  xdownload([sheet], (pud().year||'') + '年' + (pud().name||'普渡') + '名單.xls');
 }
 
 function downloadExcel(){
@@ -799,7 +841,7 @@ function openPicker(target){
   var already = {};
   if(target === 'fees') t.fees.forEach(function(x){ already[String(x.name).trim()] = true; });
   if(target === 'going') t.going.forEach(function(n){ already[n] = true; });
-  if(target === 'pudu') S.pudu.forEach(function(p){ already[String(p.name).trim()] = true; });
+  if(target === 'pudu') pud().rows.forEach(function(p){ already[String(p.name).trim()] = true; });
 
   var title = target === 'fees' ? '選擇要收費的人' : (target === 'going' ? '選擇誰要去' : '選擇要登記普渡的人');
   var rows = S.roster.map(function(r){
@@ -837,7 +879,7 @@ function confirmPicker(){
   picked.forEach(function(n){
     if(_pickTarget === 'fees') t.fees.push({name:n, table:'', due:t.feeDefault, paid:false});
     else if(_pickTarget === 'going'){ if(t.going.indexOf(n) < 0) t.going.push(n); }
-    else if(_pickTarget === 'pudu') S.pudu.push({name:n, boxes:'', bags:'', amount:'', paid:false});
+    else if(_pickTarget === 'pudu') pud().rows.push({name:n, boxes:'', bags:'', amount:'', paid:false});
   });
   closePicker(); save(); render();
 }
@@ -852,18 +894,23 @@ function syncRoster(name){
 }
 
 function puduAmount(p, price){
-  var pr = num(price || S.puduPrice) || 1680;
+  var pr = num(price || pud().price) || 1680;
   return num(p.boxes) * pr + num(p.bags) * (pr / 8);
 }
 function puduTotals(){
   var boxes = 0, bags = 0, due = 0, paid = 0;
-  S.pudu.forEach(function(p){
+  pud().rows.forEach(function(p){
     boxes += num(p.boxes); bags += num(p.bags);
     var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
     due += amt;
     if(p.paid) paid += amt;
   });
   return {boxes:boxes, bags:bags, due:due, paid:paid, unpaid:due - paid};
+}
+function puduTitle(){
+  var e = pud();
+  var d = String(e.date || '').replace(/^\s*\d{3}\s*年\s*/, '');
+  return (e.year ? e.year + '年' : '') + d + (e.name || '普渡') + (e.note || '');
 }
 function puduQty(p){
   var s = num(p.boxes) ? num(p.boxes) + '箱' : '';
@@ -874,19 +921,38 @@ function puduQty(p){
 function viewPudu(){
   var T = puduTotals();
   var h = '<div class="stack">';
+  var ev = pud();
+  var sorted = S.puduEvents.slice().sort(function(a,b){ return String(b.year).localeCompare(String(a.year)); });
   h += '<div class="col">'
     + '<div class="kicker">獨立活動 · 與出遊無關</div>'
+    + '<div class="field"><label>選擇年份／場次（共 '+S.puduEvents.length+' 筆）</label>'
+    + '<select class="input" id="pudupick">'
+    + sorted.map(function(x){
+        var tot = x.rows.reduce(function(a,p){ return a + (String(p.amount).trim() ? num(p.amount) : puduAmount(p, x.price)); }, 0);
+        return '<option value="'+esc(x.id)+'"'+(String(x.id)===String(ev.id)?' selected':'')+'>'
+          + esc(x.year||'—') + '年 · ' + esc(x.name||'普渡') + ' · ' + x.rows.length + ' 位 · ' + fmt(tot) + '$</option>';
+      }).join('')
+    + '</select></div>'
+    + '<div class="btn-row"><button class="btn btn-secondary" data-act="newpudu">＋ 新增一年</button>'
+    + '<button class="btn btn-ghost" style="border:1px solid var(--divider)" data-act="copypudu">複製這年名單</button>'
+    + (S.puduEvents.length > 1 ? '<button class="btn btn-ghost" style="border:1px solid var(--divider);color:var(--danger)" data-act="delpudu">刪除這年</button>' : '')
+    + '</div>'
+    + '<div class="rule"></div>'
     + '<div class="field"><label>活動名稱</label>'
-    + '<input class="input" data-p="puduName" placeholder="聖義堂普渡" value="'+esc(S.puduName||'')+'" style="font-family:var(--display);font-size:27px;font-weight:500;min-height:56px"></div>'
-    + '<div class="field"><label>日期（國曆／農曆）</label>'
-    + '<input class="input" data-p="puduDate" placeholder="115年國曆8/23農曆7/11" value="'+esc(S.puduDate)+'"></div>'
+    + '<input class="input" data-pe="name" placeholder="聖義堂普渡" value="'+esc(ev.name||'')+'" style="font-family:var(--display);font-size:27px;font-weight:500;min-height:56px"></div>'
+    + '<div class="fee-b" style="padding-left:0">'
+    + '<div class="fee-f"><div class="tag">年份（民國）</div>'
+    + '<input class="input bare num" placeholder="115" inputmode="numeric" data-pe="year" value="'+esc(ev.year||'')+'"></div>'
+    + '<div class="fee-f wide"><div class="tag">日期（國曆／農曆）</div>'
+    + '<input class="input bare" placeholder="國曆8/23農曆7/11" data-pe="date" value="'+esc(ev.date||'')+'"></div>'
+    + '</div>'
     + '<div class="field"><label>米種與規格（印在標題上）</label>'
-    + '<input class="input" data-p="puduNote" placeholder="花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$" value="'+esc(S.puduNote||'')+'"></div>'
+    + '<input class="input" data-pe="note" placeholder="花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$" value="'+esc(ev.note||'')+'"></div>'
     + '<div class="field"><label>一箱單價（一包＝八分之一箱）</label>'
-    + '<input class="input num" inputmode="numeric" data-p="puduPrice" value="'+esc(S.puduPrice)+'"></div>'
+    + '<input class="input num" inputmode="numeric" data-pe="price" value="'+esc(ev.price)+'"></div>'
     + '</div>';
   h += '<div class="summary">'
-    + '<div class="row"><span>登記人數</span><span class="num" data-pd="n" style="font-size:20px">'+S.pudu.length+'</span></div>'
+    + '<div class="row"><span>登記人數</span><span class="num" data-pd="n" style="font-size:20px">'+pud().rows.length+'</span></div>'
     + '<div class="row"><span>白米合計</span><span class="num" data-pd="qty" style="font-size:20px">'+T.boxes+' 箱 '+T.bags+' 包</span></div>'
     + '<div class="rule"></div>'
     + '<div class="row"><span>金額合計</span><span class="big" data-pd="due">NT$'+fmt(T.due)+'</span></div>'
@@ -894,7 +960,7 @@ function viewPudu(){
     + '<div class="row"><span>尚未收齊</span><span class="num'+(T.unpaid>0?' neg':'')+'" data-pd="unpaid" style="font-size:20px">'+fmt(T.unpaid)+'</span></div>'
     + '</div>';
   h += '<div class="col">'
-    + (S.pudu.length ? S.pudu.map(function(p,i){
+    + (pud().rows.length ? pud().rows.map(function(p,i){
         var auto = puduAmount(p);
         return '<div class="fee'+(p.paid?' paid':'')+'">'
           + '<div class="fee-a"><div class="no">'+(i+1)+'</div>'
@@ -950,26 +1016,32 @@ function viewPast(){
   var h = '<div class="stack">';
   h += '<div class="col"><h2 style="font-size:29px">歷次出遊</h2>'
     + '<div class="muted">點一場就切換過去，資料各自獨立</div><div class="rule"></div></div>';
-  h += '<div class="list">' + S.trips.map(function(t){
+  h += '<div class="col">' + S.trips.map(function(t){
       var inc = income(t), bal = inc - costTotal(t);
-      return '<button class="li" style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--hair);text-align:left;cursor:pointer" data-trip="'+t.id+'">'
-        + '<span style="flex:1"><span class="nm">'+esc(t.place||'未命名')+(t.id===S.currentId?' ·':'')+'</span>'
-        + '<br><span class="mt">'+esc(t.date||'—')+' · '+t.going.length+' 位'+(t.id===S.currentId?' · 目前編輯中':'')+'</span></span>'
+      var on = (t.id === S.currentId);
+      return '<div class="fee'+(on?' paid':'')+'">'
+        + '<div class="fee-a">'
+        + '<button class="pick-open" data-trip="'+t.id+'" style="flex:1;min-width:0;text-align:left;background:transparent;border:none;cursor:pointer;padding:0">'
+        + '<span class="nm">'+esc(t.place||'未命名')+'</span>'
+        + '<br><span class="mt">'+esc(t.date||'—')+' · '+t.going.length+' 位'+(on?' · 目前編輯中':'')+'</span></button>'
         + '<span style="text-align:right"><span class="num" style="font-size:16px">NT$'+fmt(inc)+'</span>'
-        + '<br><span class="num" style="font-size:12px;color:var(--n600)">餘 '+fmt(bal)+'</span></span></button>';
+        + '<br><span class="num" style="font-size:12px;color:var(--n600)">餘 '+fmt(bal)+'</span></span>'
+        + '<button class="x" data-deltrip="'+t.id+'" aria-label="刪除整場">'+X+'</button>'
+        + '</div></div>';
     }).join('') + '</div>';
   h += '<button class="btn btn-primary" data-act="newtrip">＋ 新增一場出遊</button>';
 
   h += '<div class="rule"></div>';
   h += '<div class="col">'
-    + '<div class="sec-t">雲端同步（Google 試算表）</div>'
-    + '<div class="muted" id="clouddot">'+(CLOUD.url?'已連結試算表':'尚未連結（資料只存這台）')+'</div>'
-    + '<div class="field"><label>試算表網址（Apps Script /exec）</label>'
-    + '<input class="input" id="cloudurl" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(CLOUD.url)+'"></div>'
-    + '<div class="btn-row"><button class="btn btn-primary" data-act="cloudsave">儲存並同步</button>'
-    + '<button class="btn btn-secondary" data-act="cloudpull">立即取回</button></div>'
+    + '<div class="sec-t">雲端同步</div>'
+    + '<div class="muted" id="clouddot">'+(CLOUD.url?'已連結共用試算表 · 自動同步':'未連結')+'</div>'
     + '<div class="muted" id="cloudmsg">'+esc(CLOUD.msg)+'</div>'
-    + '<div class="muted">手機與電腦貼同一組網址，就是同一份資料。設定方式看 Code.gs 檔開頭的說明。</div>'
+    + '<button class="btn btn-secondary" data-act="cloudpull">立即取回雲端資料</button>'
+    + '<button class="btn btn-ghost btn-inline" data-act="cloudedit">更換試算表網址</button>'
+    + (S.showCloudUrl ? '<div class="field"><label>試算表網址（Apps Script /exec）</label>'
+        + '<input class="input" id="cloudurl" value="'+esc(CLOUD.url)+'"></div>'
+        + '<div class="btn-row"><button class="btn btn-primary" data-act="cloudsave">儲存並同步</button>'
+        + '<button class="btn btn-secondary" data-act="cloudreset">恢復預設</button></div>' : '')
     + '</div>';
 
   h += '<div class="rule"></div>';
@@ -1055,20 +1127,22 @@ function viewInsure(t){
 
 function viewPuduSheet(){
   var T = puduTotals();
-  var body = '<div class="sheet">'
-    + '<div class="hd"><h3 style="font-size:24px;line-height:1.35">'
-    + esc(S.puduDate||'') + esc(S.puduName||'普渡') + esc(S.puduNote||'')
+  var nrow = pud().rows.length;
+  var comp = nrow > 26 ? ' style="font-size:13px"' : '';
+  var body = '<div class="sheet"'+(nrow > 26 ? ' data-compact="1"' : '')+'>'
+    + '<div class="hd"><h3 style="font-size:'+(nrow>26?'19px':'24px')+';line-height:1.3">'
+    + esc(puduTitle())
     + '</h3><div class="dash"></div></div>'
     + '<div class="thead"><div style="flex:1.6">姓名</div><div class="c-r" style="width:84px">白米(箱)</div>'
     + '<div class="c-r" style="width:132px">金額</div><div class="c-r" style="width:64px">已收</div></div>'
-    + S.pudu.map(function(p){
+    + pud().rows.map(function(p){
         var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
         return '<div class="trow"><div style="flex:1.6;font-weight:500">'+esc(p.name||'—')+'</div>'
           + '<div class="c-r" style="width:84px">'+esc(puduQty(p))+'</div>'
           + '<div class="c-r" style="width:132px">'+fmt(amt)+'$</div>'
           + '<div class="c-r" style="width:64px'+(p.paid?'':';color:var(--danger)')+'">'+(p.paid?'付清':'—')+'</div></div>';
       }).join('')
-    + '<div class="trow" style="border-bottom:none"><div style="flex:1.6;color:var(--n700)">合計 '+S.pudu.length+' 位</div>'
+    + '<div class="trow" style="border-bottom:none"><div style="flex:1.6;color:var(--n700)">合計 '+pud().rows.length+' 位</div>'
     + '<div class="c-r" style="width:84px;font-weight:500">'+T.boxes+'箱'+(T.bags?T.bags+'包':'')+'</div>'
     + '<div class="c-r" style="width:132px;font-weight:500">'+fmt(T.due)+'$</div>'
     + '<div class="c-r" style="width:64px">'+fmt(T.paid)+'</div></div>'
@@ -1081,13 +1155,18 @@ function viewPuduSheet(){
 
 function listOf(name){
   if(name === 'roster') return S.roster;
-  if(name === 'pudu') return S.pudu;
+  if(name === 'pudu') return pud().rows;
   return trip()[name];
 }
 
 document.addEventListener('input', function(e){
   var el = e.target;
-  if(el.dataset.p){ S[el.dataset.p] = el.value; save(); return; }
+  if(el.dataset.pe){
+    pud()[el.dataset.pe] = el.value;
+    save();
+    if(el.dataset.pe === 'price') refreshPudu();
+    return;
+  }
   if(el.dataset.f){
     trip()[el.dataset.f] = el.value;
     save();
@@ -1127,7 +1206,7 @@ function refreshPudu(){
   if(!box) return;
   var T = puduTotals();
   function set(k,v){ var el = box.querySelector('[data-pd="'+k+'"]'); if(el) el.textContent = v; }
-  set('n', S.pudu.length);
+  set('n', pud().rows.length);
   set('qty', T.boxes + ' 箱 ' + T.bags + ' 包');
   set('due', 'NT$' + fmt(T.due));
   set('paid', fmt(T.paid));
@@ -1137,7 +1216,7 @@ function refreshPudu(){
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -1156,7 +1235,7 @@ document.addEventListener('click', function(e){
     else if(nm === 'costs') trip().costs.push({name:'',amount:''});
     else if(nm === 'sponsors') trip().sponsors.push({name:'',amount:''});
     else if(nm === 'roster') S.roster.push({name:'',birth:'',id:''});
-    else if(nm === 'pudu') S.pudu.push({name:'',boxes:'',bags:'',amount:'',paid:false});
+    else if(nm === 'pudu') pud().rows.push({name:'',boxes:'',bags:'',amount:'',paid:false});
     save(); render();
     var fields = document.querySelectorAll('[data-list="'+nm+'"][data-k="name"]');
     if(fields.length){
@@ -1169,8 +1248,31 @@ document.addEventListener('click', function(e){
     return;
   }
 
+  if(el.dataset.ungo){
+    var tg = trip(), ix = tg.going.indexOf(el.dataset.ungo);
+    if(ix > -1) tg.going.splice(ix, 1);
+    save(); return render();
+  }
+
+  if(el.dataset.deltrip){
+    var did = el.dataset.deltrip;
+    var dt = null;
+    S.trips.forEach(function(x){ if(String(x.id) === String(did)) dt = x; });
+    if(!dt) return;
+    if(!confirm('要刪除「'+(dt.place||'未命名')+' '+(dt.date||'')+'」整場活動嗎？收費、費用、贊助都會一起刪除，無法復原。')) return;
+    S.trips = S.trips.filter(function(x){ return String(x.id) !== String(did); });
+    if(!S.trips.length){
+      var nid = Date.now();
+      S.trips.push({id:nid, place:'', date:today(),
+        costs:DEFAULT_COSTS.map(function(c){return {name:c.name,amount:c.amount};}),
+        fees:[], feeDefault:1700, sponsors:[], going:[]});
+    }
+    if(String(S.currentId) === String(did)) S.currentId = S.trips[0].id;
+    save(); return render();
+  }
+
   if(el.dataset.pudupaid !== undefined){
-    var pr = S.pudu[+el.dataset.pudupaid];
+    var pr = pud().rows[+el.dataset.pudupaid];
     pr.paid = !pr.paid;
     save();
     el.textContent = pr.paid ? '付清' : '未收';
@@ -1219,7 +1321,34 @@ document.addEventListener('click', function(e){
     pullCloud();
     return;
   }
+  if(a === 'newpudu' || a === 'copypudu'){
+    var src = pud();
+    var yr = String(num(src.year) ? num(src.year) + 1 : new Date().getFullYear() - 1911);
+    var nid = 'p' + Date.now();
+    S.puduEvents.unshift({
+      id:nid, year:yr, name:src.name || '聖義堂普渡', date:'', price:src.price || 1680, note:src.note || '',
+      rows: a === 'copypudu'
+        ? src.rows.map(function(p){ return {name:p.name, boxes:p.boxes, bags:p.bags, amount:'', paid:false}; })
+        : []
+    });
+    S.puduId = nid; save(); return render();
+  }
+
+  if(a === 'delpudu'){
+    if(S.puduEvents.length < 2) return;
+    var cur = pud();
+    if(!confirm('要刪除「'+(cur.year||'')+'年 '+(cur.name||'普渡')+'」整筆名單嗎？無法復原。')) return;
+    S.puduEvents = S.puduEvents.filter(function(x){ return String(x.id) !== String(cur.id); });
+    S.puduId = S.puduEvents[0].id;
+    save(); return render();
+  }
+
   if(a === 'cloudpull'){ pullCloud(); return; }
+  if(a === 'cloudedit'){ S.showCloudUrl = !S.showCloudUrl; return render(); }
+  if(a === 'cloudreset'){
+    CLOUD.url = CLOUD_DEFAULT; localStorage.removeItem(URLKEY);
+    S.showCloudUrl = false; CLOUD.msg = '已恢復預設網址'; render(); pullCloud(); return;
+  }
   if(a === 'excel'){ downloadExcel(); return; }
   if(a === 'puduexcel'){ downloadPuduExcel(); return; }
 
@@ -1269,9 +1398,8 @@ document.addEventListener('click', function(e){
   }
 
   if(a === 'export'){
-    var data = JSON.stringify({v:2, trips:S.trips, roster:S.roster, pudu:S.pudu,
-      puduName:S.puduName, puduDate:S.puduDate,
-      puduPrice:S.puduPrice, puduNote:S.puduNote}, null, 2);
+    var data = JSON.stringify({v:3, trips:S.trips, roster:S.roster,
+      puduEvents:S.puduEvents, puduId:S.puduId}, null, 2);
     var url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
     var link = document.createElement('a');
     link.href = url;
@@ -1284,6 +1412,7 @@ document.addEventListener('click', function(e){
 
 document.addEventListener('change', function(e){
   var el = e.target;
+  if(el.id === 'pudupick'){ S.puduId = el.value; save(); return render(); }
   if(el.dataset && el.dataset.list && el.dataset.k === 'name'
      && (el.dataset.list === 'fees' || el.dataset.list === 'sponsors' || el.dataset.list === 'pudu')){
     syncRoster(el.value);
@@ -1297,11 +1426,14 @@ document.addEventListener('change', function(e){
       var d = JSON.parse(String(reader.result));
       if(d.trips && d.trips.length){ S.trips = d.trips; S.currentId = d.trips[0].id; }
       if(d.roster) S.roster = d.roster;
-      if(d.pudu) S.pudu = d.pudu;
-      if(d.puduName) S.puduName = d.puduName;
-      if(d.puduDate) S.puduDate = d.puduDate;
-      if(d.puduPrice) S.puduPrice = d.puduPrice;
-      if(d.puduNote) S.puduNote = d.puduNote;
+      if(d.puduEvents && d.puduEvents.length){ S.puduEvents = d.puduEvents; S.puduId = d.puduEvents[0].id; }
+      else if(d.pudu && d.pudu.length){
+        S.puduEvents.push({id:'p'+Date.now(), year:String(guessYear(d.puduDate)||''),
+          name:d.puduName||'普渡',
+          date:String(d.puduDate||'').replace(/^\s*\d{3}\s*年\s*/, ''), price:d.puduPrice||1680,
+          note:d.puduNote||'', rows:d.pudu});
+        S.puduId = S.puduEvents[S.puduEvents.length-1].id;
+      }
       save(); render();
     }catch(err){
       var m = document.getElementById('importmsg');
@@ -1314,7 +1446,7 @@ document.addEventListener('change', function(e){
 render();
 
 if(CLOUD.url){
-  pullCloud();
+  setTimeout(pullCloud, 60);
   document.addEventListener('visibilitychange', function(){
     if(!document.hidden) pullCloud();
   });
