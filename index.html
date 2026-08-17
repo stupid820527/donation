@@ -154,9 +154,23 @@ button{font:inherit}
 .c-no{width:22px;flex:none;font-family:var(--num);font-size:12.5px;color:var(--accent);font-variant-numeric:tabular-nums}
 .c-nm{width:76px;flex:none;font-weight:500}
 .c-gr{flex:1;font-family:var(--num);font-variant-numeric:tabular-nums;color:var(--n800)}
-.c-id{flex:none;font-family:var(--num);font-variant-numeric:tabular-nums}
+.c-id{flex:none;min-width:104px;text-align:right;font-family:var(--num);font-variant-numeric:tabular-nums}
 .c-r{width:56px;flex:none;text-align:right;font-family:var(--num);font-variant-numeric:tabular-nums}
 
+.modal{position:fixed;inset:0;z-index:50;background:rgba(32,31,29,.5);display:flex;align-items:flex-end;justify-content:center}
+.modal-in{background:var(--bg);width:100%;max-width:640px;max-height:86vh;display:flex;flex-direction:column;
+  border-top-left-radius:4px;border-top-right-radius:4px;border:1px solid var(--divider)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid var(--divider)}
+.modal-hd h3{font-family:var(--display);font-weight:400;font-size:21px;margin:0}
+.modal-body{flex:1;overflow:auto;padding:6px 18px}
+.modal-ft{display:flex;gap:10px;padding:14px 18px calc(18px + env(safe-area-inset-bottom));border-top:1px solid var(--divider)}
+.modal-ft .btn{flex:1}
+.pick-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--hair);cursor:pointer;min-height:48px}
+.pick-row.dim{opacity:.45;cursor:default}
+.pick-row input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+.pick-nm{flex:1;font-size:17px;font-weight:500}
+.pick-mt{font-family:var(--num);font-size:12.5px;color:var(--n600);font-variant-numeric:tabular-nums}
+@media (min-width:720px){.modal{align-items:center}.modal-in{border-radius:4px;max-height:80vh}}
 .hidden{display:none !important}
 #print-area{display:none}
 @media print{
@@ -190,6 +204,8 @@ button{font:inherit}
 (function(){
 "use strict";
 var KEY = 'shengyi-ledger-v2';
+var URLKEY = 'shengyi-cloud-url';
+var CLOUD = { url: (localStorage.getItem(URLKEY) || ''), busy:false, msg:'', pending:false, timer:null };
 
 var ICON = {
   trip:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
@@ -258,7 +274,7 @@ function seed(){
       costs:DEFAULT_COSTS.map(function(c){return {name:c.name,amount:c.amount};}),
       fees:[], feeDefault:1700, sponsors:[], going:[]
     }],
-    roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}), pudu:[]
+    roster:ROSTER.map(function(r){return {name:r.name,birth:r.birth,id:r.id};}), pudu:[], puduName:'中元普渡', puduDate:'', updatedAt:0
   };
 }
 
@@ -291,20 +307,136 @@ function load(){
         else { if(!cur.birth && r.birth) cur.birth = r.birth; if(!cur.id && r.id) cur.id = r.id; }
       });
       if(d && d.pudu) base.pudu = d.pudu;
+      if(d && d.puduName) base.puduName = d.puduName;
+      if(d && d.puduDate) base.puduDate = d.puduDate;
+      base.updatedAt = Number(d && d.updatedAt) || 0;
     }
   }catch(e){}
   return base;
 }
 
-function save(){
+function snapshot(){
+  return {trips:S.trips, currentId:S.currentId, roster:S.roster,
+    pudu:S.pudu, puduName:S.puduName, puduDate:S.puduDate};
+}
+
+function save(silent){
+  S.updatedAt = Date.now();
   try{
-    localStorage.setItem(KEY, JSON.stringify({trips:S.trips, currentId:S.currentId, roster:S.roster, pudu:S.pudu}));
+    var payload = snapshot();
+    payload.updatedAt = S.updatedAt;
+    localStorage.setItem(KEY, JSON.stringify(payload));
     var t = new Date();
     var hh = ('0'+t.getHours()).slice(-2), mm = ('0'+t.getMinutes()).slice(-2);
-    document.getElementById('saved').textContent = '已自動儲存 ' + hh + ':' + mm;
+    setSaved('已存 ' + hh + ':' + mm + (CLOUD.url ? ' · 同步中…' : ''));
   }catch(e){
-    document.getElementById('saved').textContent = '無法儲存（瀏覽器阻擋）';
+    setSaved('無法儲存（瀏覽器阻擋）');
   }
+  if(!silent) queuePush();
+}
+
+function setSaved(txt){
+  var el = document.getElementById('saved');
+  if(el) el.textContent = txt;
+}
+
+/* ── 雲端同步（Google 試算表 / Apps Script） ── */
+function queuePush(){
+  if(!CLOUD.url) return;
+  CLOUD.pending = true;
+  clearTimeout(CLOUD.timer);
+  CLOUD.timer = setTimeout(pushCloud, 1200);
+}
+
+function pushCloud(cb){
+  if(!CLOUD.url){ if(cb) cb(false,'尚未設定網址'); return; }
+  if(CLOUD.busy){ CLOUD.pending = true; if(cb) cb(false,'同步中'); return; }
+  CLOUD.busy = true;
+  var stamp = S.updatedAt || Date.now();
+  fetch(CLOUD.url, {
+    method:'POST', redirect:'follow',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({data:snapshot(), updatedAt:stamp})
+  }).then(function(r){ return r.json(); }).then(function(j){
+    CLOUD.busy = false;
+    if(j && j.ok){
+      localStorage.setItem('shengyi-cloud-at', String(stamp));
+      CLOUD.msg = '已同步到試算表 ' + clock();
+      setSaved('已同步 ' + clock());
+    }else{
+      CLOUD.msg = '同步失敗：' + ((j && j.error) || '試算表回應異常');
+      setSaved('同步失敗，資料仍在本機');
+    }
+    if(CLOUD.pending){ CLOUD.pending = false; queuePush(); }
+    updateCloudBox();
+    if(cb) cb(!!(j && j.ok), CLOUD.msg);
+  }).catch(function(err){
+    CLOUD.busy = false;
+    CLOUD.msg = '連不上試算表（網址錯誤或未開放存取）';
+    setSaved('同步失敗，資料仍在本機');
+    updateCloudBox();
+    if(cb) cb(false, CLOUD.msg);
+  });
+}
+
+function pullCloud(cb){
+  if(!CLOUD.url){ if(cb) cb(false,'尚未設定網址'); return; }
+  CLOUD.msg = '讀取中…';
+  updateCloudBox();
+  fetch(CLOUD.url + (CLOUD.url.indexOf('?')>-1?'&':'?') + 't=' + Date.now(), {redirect:'follow'})
+    .then(function(r){ return r.json(); }).then(function(j){
+      if(!j || !j.ok){ CLOUD.msg = '讀取失敗：' + ((j && j.error) || '試算表回應異常'); updateCloudBox(); if(cb) cb(false); return; }
+      if(!j.data){ CLOUD.msg = '試算表還是空的，會把這台的資料上傳'; updateCloudBox(); pushCloud(); if(cb) cb(true); return; }
+      var mine = S.updatedAt || 0, theirs = Number(j.updatedAt) || 0;
+      if(theirs > mine){
+        adopt(j.data);
+        CLOUD.msg = '已取回較新的雲端資料 ' + clock();
+        save(true);
+        render();
+      }else if(mine > theirs){
+        CLOUD.msg = '這台的資料較新，正在上傳…';
+        pushCloud();
+      }else{
+        CLOUD.msg = '已是最新 ' + clock();
+      }
+      updateCloudBox();
+      if(cb) cb(true);
+    }).catch(function(){
+      CLOUD.msg = '連不上試算表（網址錯誤或未開放存取）';
+      updateCloudBox();
+      if(cb) cb(false);
+    });
+}
+
+function adopt(d){
+  if(d.trips && d.trips.length){
+    d.trips.forEach(function(t){
+      if(!t.fees) t.fees = [];
+      if(!t.feeDefault) t.feeDefault = 1700;
+      if(!t.sponsors) t.sponsors = [];
+      if(!t.going) t.going = [];
+      if(!t.costs) t.costs = [];
+    });
+    S.trips = d.trips;
+    S.currentId = d.currentId || d.trips[0].id;
+  }
+  if(d.roster) S.roster = d.roster;
+  if(d.pudu) S.pudu = d.pudu;
+  if(d.puduName !== undefined) S.puduName = d.puduName;
+  if(d.puduDate !== undefined) S.puduDate = d.puduDate;
+  S.updatedAt = Number(d.updatedAt) || Date.now();
+}
+
+function clock(){
+  var t = new Date();
+  return ('0'+t.getHours()).slice(-2) + ':' + ('0'+t.getMinutes()).slice(-2);
+}
+
+function updateCloudBox(){
+  var el = document.getElementById('cloudmsg');
+  if(el) el.textContent = CLOUD.msg;
+  var dot = document.getElementById('clouddot');
+  if(dot) dot.textContent = CLOUD.url ? '已連結試算表' : '尚未連結（資料只存這台）';
 }
 
 function trip(){
@@ -330,9 +462,14 @@ function goingPeople(t){
 
 /* ── render ───────────────────────────────────────────── */
 
+var _lastKey = null;
 function render(){
   var v = document.getElementById('view');
   var t = trip();
+  var key = S.tab + '|' + (S.screen||'') + '|' + S.currentId;
+  var keep = (key === _lastKey);
+  var y = window.pageYOffset;
+  _lastKey = key;
   if(S.screen === 'sheet') v.innerHTML = viewSheet(t);
   else if(S.screen === 'insure') v.innerHTML = viewInsure(t);
   else if(S.screen === 'pudusheet') v.innerHTML = viewPuduSheet();
@@ -341,7 +478,7 @@ function render(){
   else if(S.tab === 'roster') v.innerHTML = viewRoster();
   else v.innerHTML = viewPast();
   renderTabs();
-  window.scrollTo(0,0);
+  if(keep) window.scrollTo(0, y); else window.scrollTo(0,0);
 }
 
 function renderTabs(){
@@ -439,7 +576,7 @@ function viewTrip(t){
   h += '<div class="col">'
     + '<button class="btn btn-secondary" data-act="sheet">匯出捐款表（列印檔）</button>'
     + '<button class="btn btn-secondary" data-act="insure">匯出保險名單 PDF</button>'
-    + '<button class="btn btn-secondary" data-act="excel">匯出 Excel（收費／收支／保險／普渡）</button>'
+    + '<button class="btn btn-secondary" data-act="excel">匯出 Excel（收費／贊助／收支／保險）</button>'
     + '</div>';
 
   return h + '</div>';
@@ -470,6 +607,28 @@ function xrow(cells){ return '<Row>'+cells.join('')+'</Row>'; }
 function xsheet(name, rows){
   return '<Worksheet ss:Name="'+xesc(name)+'"><Table>'+rows.join('')+'</Table></Worksheet>';
 }
+function xdownload(sheets, filename){
+  var xml = '<?xml version="1.0" encoding="UTF-8"?>'
+    + '<?mso-application progid="Excel.Sheet"?>'
+    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+    + sheets.join('') + '</Workbook>';
+  var url = URL.createObjectURL(new Blob(['\ufeff'+xml], {type:'application/vnd.ms-excel'}));
+  var link = document.createElement('a');
+  link.href = url; link.download = filename;
+  link.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+function downloadPuduExcel(){
+  var rows = [xrow([xcell('編號'),xcell('名子'),xcell('桌數'),xcell('普渡米（包）')])];
+  S.pudu.forEach(function(p,i){ rows.push(xrow([xcell(i+1,true),xcell(p.name),xcell(p.tables,true),xcell(p.rice,true)])); });
+  rows.push(xrow([xcell(''),xcell('合計'),
+    xcell(S.pudu.reduce(function(a,x){return a+num(x.tables);},0),true),
+    xcell(S.pudu.reduce(function(a,x){return a+num(x.rice);},0),true)]));
+  xdownload([xsheet('普渡名單', rows)],
+    (S.puduName||'普渡') + (S.puduDate ? '-' + String(S.puduDate).replace(/\./g,'') : '') + '.xls');
+}
+
 function downloadExcel(){
   var t = trip();
   var sheets = [];
@@ -499,32 +658,80 @@ function downloadExcel(){
   g.forEach(function(p){ iRows.push(xrow([xcell(p.name),xcell(p.birth),xcell(p.id)])); });
   sheets.push(xsheet('保險名單', iRows));
 
-  var pRows = [xrow([xcell('名子'),xcell('桌數'),xcell('普渡米（包）')])];
-  S.pudu.forEach(function(p){ pRows.push(xrow([xcell(p.name),xcell(p.tables,true),xcell(p.rice,true)])); });
-  pRows.push(xrow([xcell('合計'),
-    xcell(S.pudu.reduce(function(a,x){return a+num(x.tables);},0),true),
-    xcell(S.pudu.reduce(function(a,x){return a+num(x.rice);},0),true)]));
-  sheets.push(xsheet('普渡名單', pRows));
+  xdownload(sheets, (t.place||'出遊') + '-' + String(t.date).replace(/\./g,'') + '.xls');
+}
 
-  var xml = '<?xml version="1.0" encoding="UTF-8"?>'
-    + '<?mso-application progid="Excel.Sheet"?>'
-    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
-    + sheets.join('') + '</Workbook>';
+/* ── 名冊挑選器 ── */
+var _pickTarget = null;
+function openPicker(target){
+  _pickTarget = target;
+  var t = trip();
+  var already = {};
+  if(target === 'fees') t.fees.forEach(function(x){ already[String(x.name).trim()] = true; });
+  if(target === 'going') t.going.forEach(function(n){ already[n] = true; });
+  if(target === 'pudu') S.pudu.forEach(function(p){ already[String(p.name).trim()] = true; });
 
-  var url = URL.createObjectURL(new Blob(['\ufeff'+xml], {type:'application/vnd.ms-excel'}));
-  var link = document.createElement('a');
-  link.href = url;
-  link.download = (t.place||'出遊') + '-' + String(t.date).replace(/\./g,'') + '.xls';
-  link.click();
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  var title = target === 'fees' ? '選擇要收費的人' : (target === 'going' ? '選擇誰要去' : '選擇要登記普渡的人');
+  var rows = S.roster.map(function(r,i){
+    var on = !!already[r.name];
+    return '<label class="pick-row'+(on?' dim':'')+'">'
+      + '<input type="checkbox" value="'+esc(r.name)+'"'+(on?' checked disabled':'')+'>'
+      + '<span class="pick-nm">'+esc(r.name)+'</span>'
+      + '<span class="pick-mt">'+(on?'已在名單':esc(r.birth||'—'))+'</span></label>';
+  }).join('');
+
+  var el = document.createElement('div');
+  el.id = 'picker';
+  el.className = 'modal';
+  el.innerHTML = '<div class="modal-in">'
+    + '<div class="modal-hd"><h3>'+title+'</h3>'
+    + '<button class="x" data-act="pickclose" aria-label="關閉">'+X+'</button></div>'
+    + '<div class="modal-body">'+(S.roster.length ? rows : '<div class="muted">名冊是空的。</div>')+'</div>'
+    + '<div class="modal-ft">'
+    + '<button class="btn btn-ghost" data-act="pickall">全選</button>'
+    + '<button class="btn btn-primary" data-act="pickconfirm">加入選取的人</button></div></div>';
+  document.body.appendChild(el);
+  document.body.style.overflow = 'hidden';
+}
+function closePicker(){
+  var el = document.getElementById('picker');
+  if(el) el.remove();
+  document.body.style.overflow = '';
+  _pickTarget = null;
+}
+function confirmPicker(){
+  var picked = [].filter.call(document.querySelectorAll('#picker input[type=checkbox]'), function(c){
+    return c.checked && !c.disabled;
+  }).map(function(c){ return c.value; });
+  var t = trip();
+  picked.forEach(function(n){
+    if(_pickTarget === 'fees') t.fees.push({name:n, table:'', due:t.feeDefault, paid:false});
+    else if(_pickTarget === 'going'){ if(t.going.indexOf(n) < 0) t.going.push(n); }
+    else if(_pickTarget === 'pudu') S.pudu.push({name:n, tables:'', rice:''});
+  });
+  closePicker(); save(); render();
+}
+
+/* ── 新名字自動進名冊 ── */
+function syncRoster(name){
+  var n = String(name||'').trim();
+  if(!n) return;
+  for(var i=0;i<S.roster.length;i++) if(String(S.roster[i].name).trim() === n) return;
+  S.roster.push({name:n, birth:'', id:''});
+  save();
 }
 
 function viewPudu(){
   var tables = S.pudu.reduce(function(a,x){return a+num(x.tables);},0);
   var rice = S.pudu.reduce(function(a,x){return a+num(x.rice);},0);
   var h = '<div class="stack">';
-  h += '<div class="col"><h2 style="font-size:29px">普渡名單</h2>'
-    + '<div class="muted">登記名子、桌數與普渡米數量</div></div>';
+  h += '<div class="col">'
+    + '<div class="kicker">獨立活動 · 與出遊無關</div>'
+    + '<div class="field"><label>活動名稱</label>'
+    + '<input class="input" data-p="puduName" placeholder="中元普渡" value="'+esc(S.puduName||'')+'" style="font-family:var(--display);font-size:27px;font-weight:500;min-height:56px"></div>'
+    + '<div class="field"><label>日期</label>'
+    + '<input class="input num" data-p="puduDate" placeholder="115.07.15" value="'+esc(S.puduDate)+'"></div>'
+    + '</div>';
   h += '<div class="tri">'
     + '<div><div class="lbl">登記人數</div><div class="big">'+S.pudu.length+'</div></div>'
     + '<div><div class="lbl">總桌數</div><div class="big">'+tables+'</div></div>'
@@ -543,8 +750,10 @@ function viewPudu(){
       }).join('') : '<div class="muted">還沒有人登記普渡。</div>')
     + '</div>';
   h += '<div class="col">'
-    + '<button class="btn btn-primary" data-add="pudu">＋ 新增一位</button>'
-    + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印檔）</button></div>';
+    + '<div class="btn-row"><button class="btn btn-primary" data-add="pudu">＋ 新增一位</button>'
+    + '<button class="btn btn-secondary" data-act="fillpudu">從名冊挑選</button></div>'
+    + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印檔）</button>'
+    + '<button class="btn btn-secondary" data-act="puduexcel">匯出普渡 Excel</button></div>';
   return h + '</div>';
 }
 
@@ -590,8 +799,20 @@ function viewPast(){
 
   h += '<div class="rule"></div>';
   h += '<div class="col">'
+    + '<div class="sec-t">雲端同步（Google 試算表）</div>'
+    + '<div class="muted" id="clouddot">'+(CLOUD.url?'已連結試算表':'尚未連結（資料只存這台）')+'</div>'
+    + '<div class="field"><label>試算表網址（Apps Script /exec）</label>'
+    + '<input class="input" id="cloudurl" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(CLOUD.url)+'"></div>'
+    + '<div class="btn-row"><button class="btn btn-primary" data-act="cloudsave">儲存並同步</button>'
+    + '<button class="btn btn-secondary" data-act="cloudpull">立即取回</button></div>'
+    + '<div class="muted" id="cloudmsg">'+esc(CLOUD.msg)+'</div>'
+    + '<div class="muted">手機與電腦貼同一組網址，就是同一份資料。設定方式看 Code.gs 檔開頭的說明。</div>'
+    + '</div>';
+
+  h += '<div class="rule"></div>';
+  h += '<div class="col">'
     + '<div class="sec-t">備份與換裝置</div>'
-    + '<div class="muted">資料存在這台裝置的瀏覽器裡，關掉網頁不會消失。要換手機或搬到電腦，先「匯出備份檔」，把檔案傳過去再「匯入備份檔」。</div>'
+    + '<div class="muted">沒有連雲端時，資料只存在這台裝置。備份檔可以手動搬到別台。</div>'
     + '<button class="btn btn-secondary" data-act="export">匯出備份檔</button>'
     + '<label class="btn btn-ghost" style="border:1px solid var(--divider)">匯入備份檔'
     + '<input type="file" accept="application/json,.json" id="importer" style="display:none"></label>'
@@ -602,27 +823,51 @@ function viewPast(){
 
 function viewSheet(t){
   var inc = income(t), cost = costTotal(t), bal = inc - cost;
+  var going = goingPeople(t);
   var body = '<div class="sheet">'
-    + '<div class="hd"><h3>聖義堂 出遊記帳表</h3>'
-    + '<div class="sub">'+esc(t.place)+' · '+esc(t.date)+' · 隨行 '+goingPeople(t).length+' 位</div><div class="dash"></div></div>'
-    + '<div class="grp"><div class="lbl">收費明細</div>'
-    + (t.fees.length ? t.fees.map(function(x){
-        return '<div class="sr"><span>'+esc(x.name||'—')+(x.table?'（'+esc(x.table)+'桌）':'')+'</span>'
-          + '<span class="num">'+fmt(x.due)+(x.paid?'':' 未繳')+'</span></div>';
-      }).join('') : '<div class="sr"><span style="color:var(--n600)">尚無收費</span><span class="num">0</span></div>')
-    + '<div class="sr sum"><span>應收 / 已收 / 未收</span><span class="num">'
-    + fmt(feeDue(t))+' / '+fmt(feePaid(t))+' / '+fmt(feeUnpaid(t))+'</span></div></div>'
-    + '<div class="grp"><div class="lbl">隨喜贊助</div>'
-    + (t.sponsors.length ? t.sponsors.map(function(s){
-        return '<div class="sr"><span>'+esc(s.name||'—')+'</span><span class="num">'+fmt(s.amount)+'</span></div>';
-      }).join('') : '<div class="sr"><span style="color:var(--n600)">尚無贊助</span><span class="num">0</span></div>')
-    + '<div class="sr sum"><span>贊助小計</span><span class="num">'+fmt(sponsorTotal(t))+'</span></div>'
-    + '<div class="sr sum"><span>收款總額</span><span class="num">'+fmt(inc)+'</span></div></div>'
-    + '<div class="grp"><div class="lbl">支出明細</div>'
-    + t.costs.map(function(c){
-        return '<div class="sr"><span>'+esc(c.name||'—')+'</span><span class="num">−'+fmt(c.amount)+'</span></div>';
+    + '<div class="hd"><h3>聖義堂 出遊收支表</h3>'
+    + '<div class="sub">'+esc(t.place||'—')+' · '+esc(t.date||'—')+' · 隨行 '+going.length+' 位</div><div class="dash"></div></div>'
+
+    + '<div class="grp"><div class="lbl">一、收費名單</div>'
+    + '<div class="thead"><div class="c-no">＃</div><div class="c-nm">姓名</div>'
+    + '<div class="c-gr">桌號</div><div class="c-r">費用</div><div class="c-r" style="width:44px">已繳</div></div>'
+    + (t.fees.length ? t.fees.map(function(x,i){
+        return '<div class="trow"><div class="c-no">'+(i+1)+'</div>'
+          + '<div class="c-nm">'+esc(x.name||'—')+'</div>'
+          + '<div class="c-gr">'+esc(x.table||'—')+'</div>'
+          + '<div class="c-r">'+fmt(x.due)+'</div>'
+          + '<div class="c-r" style="width:44px'+(x.paid?'':';color:var(--danger)')+'">'+(x.paid?'✓':'未')+'</div></div>';
+      }).join('') : '<div class="trow"><div style="color:var(--n600)">尚無收費登記</div></div>')
+    + '<div class="trow" style="border-bottom:none">'
+    + '<div class="c-no"></div><div class="c-nm" style="color:var(--n700)">合計</div>'
+    + '<div class="c-gr num">應收 '+fmt(feeDue(t))+'</div>'
+    + '<div class="c-r" style="width:auto">已收 '+fmt(feePaid(t))+' · 未收 '+fmt(feeUnpaid(t))+'</div></div></div>'
+
+    + '<div class="grp"><div class="lbl">二、隨喜贊助</div>'
+    + '<div class="thead"><div class="c-no">＃</div><div style="flex:1">姓名</div><div class="c-r" style="width:88px">金額</div></div>'
+    + (t.sponsors.length ? t.sponsors.map(function(s,i){
+        return '<div class="trow"><div class="c-no">'+(i+1)+'</div>'
+          + '<div style="flex:1">'+esc(s.name||'—')+'</div>'
+          + '<div class="c-r" style="width:88px">'+fmt(s.amount)+'</div></div>';
+      }).join('') : '<div class="trow"><div style="color:var(--n600)">尚無贊助</div></div>')
+    + '<div class="trow" style="border-bottom:none"><div class="c-no"></div>'
+    + '<div style="flex:1;color:var(--n700)">贊助小計</div>'
+    + '<div class="c-r" style="width:88px;font-weight:500">'+fmt(sponsorTotal(t))+'</div></div></div>'
+
+    + '<div class="grp"><div class="lbl">三、支出明細</div>'
+    + '<div class="thead"><div class="c-no">＃</div><div style="flex:1">費用項目</div><div class="c-r" style="width:88px">金額</div></div>'
+    + t.costs.map(function(c,i){
+        return '<div class="trow"><div class="c-no">'+(i+1)+'</div>'
+          + '<div style="flex:1">'+esc(c.name||'—')+'</div>'
+          + '<div class="c-r" style="width:88px">'+fmt(c.amount)+'</div></div>';
       }).join('')
-    + '<div class="sr sum"><span>支出小計</span><span class="num">−'+fmt(cost)+'</span></div></div>'
+    + '<div class="trow" style="border-bottom:none"><div class="c-no"></div>'
+    + '<div style="flex:1;color:var(--n700)">支出小計</div>'
+    + '<div class="c-r" style="width:88px;font-weight:500">'+fmt(cost)+'</div></div></div>'
+
+    + '<div class="grp"><div class="lbl">四、結算</div>'
+    + '<div class="sr"><span>收款總額（已收費用＋贊助）</span><span class="num">'+fmt(inc)+'</span></div>'
+    + '<div class="sr"><span>支出總額</span><span class="num">−'+fmt(cost)+'</span></div></div>'
     + '<div class="total"><span style="font-size:15px">剩餘餘額</span>'
     + '<span class="big" style="font-size:27px">'+(bal<0?'−NT$':'NT$')+fmt(Math.abs(bal))+'</span></div>'
     + '<div class="foot">製表 '+today()+' · 聖義堂班長</div></div>';
@@ -649,8 +894,8 @@ function viewPuduSheet(){
   var tables = S.pudu.reduce(function(a,x){return a+num(x.tables);},0);
   var rice = S.pudu.reduce(function(a,x){return a+num(x.rice);},0);
   var body = '<div class="sheet">'
-    + '<div class="hd"><h3>聖義堂 中元普渡名單</h3>'
-    + '<div class="sub">共 '+S.pudu.length+' 位 · '+tables+' 桌 · 普渡米 '+rice+' 包</div><div class="dash"></div></div>'
+    + '<div class="hd"><h3>聖義堂 '+esc(S.puduName||'普渡')+' 名單</h3>'
+    + '<div class="sub">'+(S.puduDate?esc(S.puduDate)+' · ':'')+'共 '+S.pudu.length+' 位 · '+tables+' 桌 · 普渡米 '+rice+' 包</div><div class="dash"></div></div>'
     + '<div class="thead"><div class="c-no">＃</div><div style="flex:1">名子</div><div class="c-r">桌數</div><div class="c-r">米（包）</div></div>'
     + S.pudu.map(function(p,i){
         return '<div class="trow"><div class="c-no">'+(i+1)+'</div><div style="flex:1;font-weight:500">'+esc(p.name||'—')+'</div>'
@@ -673,6 +918,7 @@ function listOf(name){
 
 document.addEventListener('input', function(e){
   var el = e.target;
+  if(el.dataset.p){ S[el.dataset.p] = el.value; save(); return; }
   if(el.dataset.f){
     trip()[el.dataset.f] = el.value;
     save();
@@ -740,10 +986,13 @@ document.addEventListener('click', function(e){
     else if(nm === 'roster') S.roster.push({name:'',birth:'',id:''});
     else if(nm === 'pudu') S.pudu.push({name:'',tables:'',rice:''});
     save(); render();
-    var boxes = document.querySelectorAll('.box');
-    if(boxes.length){
-      var last = boxes[boxes.length-1].querySelector('input');
-      if(last) last.focus();
+    var fields = document.querySelectorAll('[data-list="'+nm+'"][data-k="name"]');
+    if(fields.length){
+      var last = fields[fields.length-1];
+      last.focus({preventScroll:true});
+      var box = last.closest('.fee') || last.closest('.box') || last;
+      var top = box.getBoundingClientRect().top + window.pageYOffset - 72;
+      window.scrollTo(0, Math.max(0, top));
     }
     return;
   }
@@ -751,7 +1000,12 @@ document.addEventListener('click', function(e){
   if(el.dataset.paid !== undefined){
     var t2 = trip(), row = t2.fees[+el.dataset.paid];
     row.paid = !row.paid;
-    save(); return render();
+    save();
+    el.textContent = row.paid ? '已繳' : '未繳';
+    var wrap = el.closest('.fee');
+    if(wrap) wrap.className = 'fee' + (row.paid ? ' paid' : '');
+    refreshSummary();
+    return;
   }
 
   if(el.dataset.del){ listOf(el.dataset.del).splice(+el.dataset.i,1); save(); return render(); }
@@ -763,18 +1017,28 @@ document.addEventListener('click', function(e){
   if(a === 'pudusheet'){ S.screen = 'pudusheet'; return render(); }
   if(a === 'toroster'){ S.tab = 'roster'; S.screen = null; return render(); }
 
-  if(a === 'fillfees'){
-    var t3 = trip();
-    var names = t3.going.length ? t3.going : S.roster.map(function(r){return r.name;});
-    var have3 = {};
-    t3.fees.forEach(function(x){ have3[String(x.name).trim()] = true; });
-    names.forEach(function(n){
-      if(!have3[n]) t3.fees.push({name:n, table:'', due:t3.feeDefault, paid:false});
-    });
-    save(); return render();
+  if(a === 'fillfees'){ openPicker('fees'); return; }
+  if(a === 'fillgoing'){ openPicker('going'); return; }
+  if(a === 'fillpudu'){ openPicker('pudu'); return; }
+  if(a === 'pickclose'){ closePicker(); return; }
+  if(a === 'pickall'){
+    document.querySelectorAll('#picker input[type=checkbox]').forEach(function(c){ c.checked = true; });
+    return;
   }
+  if(a === 'pickconfirm'){ confirmPicker(); return; }
 
+  if(a === 'cloudsave'){
+    var v = (document.getElementById('cloudurl').value || '').trim();
+    CLOUD.url = v;
+    if(v) localStorage.setItem(URLKEY, v); else localStorage.removeItem(URLKEY);
+    if(!v){ CLOUD.msg = '已取消連結'; updateCloudBox(); return; }
+    CLOUD.msg = '連線中…'; updateCloudBox();
+    pullCloud();
+    return;
+  }
+  if(a === 'cloudpull'){ pullCloud(); return; }
   if(a === 'excel'){ downloadExcel(); return; }
+  if(a === 'puduexcel'){ downloadPuduExcel(); return; }
 
   if(a === 'fillroster'){
     var have2 = {};
@@ -822,7 +1086,8 @@ document.addEventListener('click', function(e){
   }
 
   if(a === 'export'){
-    var data = JSON.stringify({v:2, trips:S.trips, roster:S.roster, pudu:S.pudu}, null, 2);
+    var data = JSON.stringify({v:2, trips:S.trips, roster:S.roster, pudu:S.pudu,
+      puduName:S.puduName, puduDate:S.puduDate}, null, 2);
     var url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
     var link = document.createElement('a');
     link.href = url;
@@ -834,7 +1099,12 @@ document.addEventListener('click', function(e){
 });
 
 document.addEventListener('change', function(e){
-  if(e.target.id !== 'importer') return;
+  var el = e.target;
+  if(el.dataset && el.dataset.list && el.dataset.k === 'name'
+     && (el.dataset.list === 'fees' || el.dataset.list === 'sponsors' || el.dataset.list === 'pudu')){
+    syncRoster(el.value);
+  }
+  if(el.id !== 'importer') return;
   var file = e.target.files && e.target.files[0];
   if(!file) return;
   var reader = new FileReader();
@@ -844,6 +1114,8 @@ document.addEventListener('change', function(e){
       if(d.trips && d.trips.length){ S.trips = d.trips; S.currentId = d.trips[0].id; }
       if(d.roster) S.roster = d.roster;
       if(d.pudu) S.pudu = d.pudu;
+      if(d.puduName) S.puduName = d.puduName;
+      if(d.puduDate) S.puduDate = d.puduDate;
       save(); render();
     }catch(err){
       var m = document.getElementById('importmsg');
@@ -854,6 +1126,14 @@ document.addEventListener('change', function(e){
 });
 
 render();
+
+if(CLOUD.url){
+  pullCloud();
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) pullCloud();
+  });
+  window.addEventListener('online', function(){ pullCloud(); });
+}
 })();
 </script>
 </body>
