@@ -497,8 +497,21 @@ function today(){
   var d = new Date();
   return (d.getFullYear()-1911) + '.' + ('0'+(d.getMonth()+1)).slice(-2) + '.' + ('0'+d.getDate()).slice(-2);
 }
+function rosterOf(name){
+  var n = String(name||'').trim(), out = null;
+  S.roster.forEach(function(r){ if(String(r.name).trim() === n) out = r; });
+  return out;
+}
 function goingPeople(t){
-  return S.roster.filter(function(r){ return t.going.indexOf(r.name) > -1; });
+  var seen = {}, out = [];
+  t.fees.forEach(function(x){
+    var n = String(x.name||'').trim();
+    if(!n || seen[n]) return;
+    seen[n] = 1;
+    var r = rosterOf(n);
+    out.push(r || {name:n, birth:'', id:''});
+  });
+  return out;
 }
 
 /* ── render ───────────────────────────────────────────── */
@@ -548,24 +561,6 @@ function viewTrip(t){
     + '<input class="input num" data-f="date" value="'+esc(t.date)+'"></div>'
     + '</div>';
 
-  h += '<div><div class="sec"><div class="sec-t">誰要去</div><div class="rule"></div>'
-    + '<div class="sec-n">'+going.length+' 位</div></div>'
-    + '<div class="col">'
-    + (going.length ? going.map(function(r){
-        var lack = (!r.birth || !r.id);
-        return '<div class="box">'
-          + '<div class="grow"><div class="nm">'+esc(r.name)+'</div>'
-          + '<div class="mt"'+(lack?' style="color:var(--danger)"':'')+'>'
-          + esc(r.birth||'缺生日') + ' · ' + esc(r.id||'缺身分證') + '</div></div>'
-          + '<button class="x" data-ungo="'+esc(r.name)+'" aria-label="移除">'+X+'</button></div>';
-      }).join('') : '<div class="muted">還沒有人。按下面「從名冊挑選」勾選這次要去的人。</div>')
-    + '</div>'
-    + '<div class="btn-row" style="margin-top:10px">'
-    + '<button class="btn btn-secondary" data-act="fillgoing">從名冊挑選</button>'
-    + '<button class="btn btn-ghost" style="border:1px solid var(--divider)" data-act="toroster">管理名冊</button></div></div>';
-
-  h += summaryHtml(t);
-
   h += '<div><div class="sec"><div class="sec-t">費用項目</div><div class="rule"></div><div class="sec-n">'+t.costs.length+' 項</div></div>'
     + '<div class="col">'
     + t.costs.map(function(c,i){
@@ -579,15 +574,22 @@ function viewTrip(t){
     + '</div>'
     + '<button class="btn btn-ghost btn-inline" data-add="costs" style="margin-top:10px">＋ 新增費用項目</button></div>';
 
-  h += '<div><div class="sec"><div class="sec-t">收費名單</div><div class="rule"></div>'
-    + '<div class="sec-n" data-fees-n>'+t.fees.length+' 人 · 未繳 '+t.fees.filter(function(x){return !x.paid;}).length+'</div></div>'
+  var lackN = t.fees.filter(function(x){
+    var r = rosterOf(x.name);
+    return !r || !r.birth || !r.id;
+  }).length;
+  h += '<div><div class="sec"><div class="sec-t">誰要去 · 收費</div><div class="rule"></div>'
+    + '<div class="sec-n" data-fees-n>'+t.fees.length+' 位 · 未繳 '+t.fees.filter(function(x){return !x.paid;}).length+'</div></div>'
+    + (lackN ? '<div class="muted" style="color:var(--danger);margin-bottom:8px">'+lackN+' 位缺生日或身分證，投保名單會漏掉 — 到名冊補齊</div>' : '')
     + '<div class="box" style="margin-bottom:10px">'
     + '<div class="grow"><div class="tag">每人費用（預設）</div>'
     + '<input class="input bare num" style="font-size:18px" inputmode="numeric" data-f="feeDefault" value="'+esc(t.feeDefault)+'"></div>'
-    + '<button class="btn btn-ghost" style="width:auto;min-height:44px;font-size:14px;border:1px solid var(--divider)" data-act="fillfees">從名冊帶入</button>'
+    + '<button class="btn btn-ghost" style="width:auto;min-height:44px;font-size:14px;border:1px solid var(--divider)" data-act="fillfees">從名冊挑選</button>'
     + '</div>'
     + '<div class="col">'
     + (t.fees.length ? t.fees.map(function(x,i){
+        var r = rosterOf(x.name);
+        var lack = !r || !r.birth || !r.id;
         return '<div class="fee'+(x.paid?' paid':'')+'">'
           + '<div class="fee-a">'
           + '<div class="no">'+(i+1)+'</div>'
@@ -601,10 +603,15 @@ function viewTrip(t){
           + '<input class="input bare num" placeholder="—" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="table" value="'+esc(x.table)+'"></div>'
           + '<div class="fee-f wide"><div class="tag">應繳</div><div class="amt-in"><span>NT$</span>'
           + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="due" value="'+esc(x.due)+'"></div></div>'
-          + '</div></div>';
-      }).join('') : '<div class="muted">還沒有人登記收費。按「從名冊帶入」把勾選要去的人一次加進來，或單筆新增。</div>')
+          + '</div>'
+          + '<div class="mt" style="padding-left:32px'+(lack?';color:var(--danger)':'')+'">'
+          + esc((r && r.birth) || '缺生日') + ' · ' + esc((r && r.id) || '缺身分證') + '</div>'
+          + '</div>';
+      }).join('') : '<div class="muted">還沒有人。按「從名冊挑選」勾選這次要去的人，費用會自動帶入。</div>')
     + '</div>'
-    + '<button class="btn btn-ghost btn-inline" data-add="fees" style="margin-top:10px">＋ 單筆新增</button></div>';
+    + '<div class="btn-row" style="margin-top:10px">'
+    + '<button class="btn btn-ghost" style="border:1px solid var(--divider)" data-add="fees">＋ 單筆新增</button>'
+    + '<button class="btn btn-ghost" style="border:1px solid var(--divider)" data-act="toroster">管理名冊</button></div></div>';
 
   h += '<div><div class="sec"><div class="sec-t">隨喜贊助</div><div class="rule"></div><div class="sec-n">'+t.sponsors.length+' 筆</div></div>'
     + '<div class="col">'
@@ -618,6 +625,8 @@ function viewTrip(t){
       }).join('') : '<div class="muted">還沒有人贊助，按下面新增。</div>')
     + '</div>'
     + '<button class="btn btn-primary" data-add="sponsors" style="margin-top:12px">＋ 新增贊助（姓名＋金額）</button></div>';
+
+  h += summaryHtml(t);
 
   h += '<div class="col">'
     + '<button class="btn btn-secondary" data-act="insure">匯出保險名單 PDF</button>'
@@ -757,7 +766,7 @@ function downloadPuduExcel(){
   });
   rows.push('<Row ht="'+rh+'">'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc('合計 '+pud().rows.length+' 位')+'</Data></Cell>'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(T.boxes+'箱'+(T.bags?T.bags+'包':''))+'</Data></Cell>'
+    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(qtyText(T.bagsTotal))+'</Data></Cell>'
     + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(fmt(T.due)+'$')+'</Data></Cell>'
     + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+xesc('已收 '+fmt(T.paid))+'</Data></Cell></Row>');
 
@@ -771,6 +780,18 @@ function downloadPuduExcel(){
     + '<ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
 
   xdownload([sheet], (pud().year||'') + '年' + (pud().name||'普渡') + '名單.xls');
+}
+
+function rocTitle(t){
+  var d = String(t.date||'').split(/[.\/-]/);
+  var head = '';
+  if(d.length >= 3) head = num(d[0]) + '年' + num(d[1]) + '/' + num(d[2]) + ' ';
+  else if(t.date) head = t.date + ' ';
+  var p = String(t.place||'').trim();
+  if(!p) return head + '一日進香名單';
+  if(p.indexOf('名單') > -1) return head + p;
+  if(p.indexOf('進香') > -1) return head + p + '名單';
+  return head + p + '一日進香名單';
 }
 
 function downloadExcel(){
@@ -893,30 +914,41 @@ function syncRoster(name){
   save();
 }
 
-function puduAmount(p, price){
-  var pr = num(price || pud().price) || 1680;
-  return num(p.boxes) * pr + num(p.bags) * (pr / 8);
+var BAGS_PER_BOX = 8;
+
+/* 一列的總包數（箱換算成包），金額一律用包數 × 單包價 */
+function puduBags(p){ return num(p.boxes) * BAGS_PER_BOX + num(p.bags); }
+function bagPrice(price){ return (num(price || pud().price) || 1680) / BAGS_PER_BOX; }
+function puduAmount(p, price){ return Math.round(puduBags(p) * bagPrice(price)); }
+
+/* 包數進位成「N箱M包」 */
+function boxesBags(totalBags){
+  return {boxes: Math.floor(totalBags / BAGS_PER_BOX), bags: totalBags % BAGS_PER_BOX};
+}
+function qtyText(totalBags){
+  var q = boxesBags(totalBags);
+  if(!totalBags) return '—';
+  return (q.boxes ? q.boxes + '箱' : '') + (q.bags ? q.bags + '包' : '');
 }
 function puduTotals(){
-  var boxes = 0, bags = 0, due = 0, paid = 0;
+  var totalBags = 0, due = 0, paid = 0, auto = 0;
   pud().rows.forEach(function(p){
-    boxes += num(p.boxes); bags += num(p.bags);
+    totalBags += puduBags(p);
+    auto += puduAmount(p);
     var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
     due += amt;
     if(p.paid) paid += amt;
   });
-  return {boxes:boxes, bags:bags, due:due, paid:paid, unpaid:due - paid};
+  var q = boxesBags(totalBags);
+  return {bagsTotal:totalBags, boxes:q.boxes, bags:q.bags, due:due, paid:paid,
+    unpaid:due - paid, auto:auto, diff:due - auto};
 }
 function puduTitle(){
   var e = pud();
   var d = String(e.date || '').replace(/^\s*\d{3}\s*年\s*/, '');
   return (e.year ? e.year + '年' : '') + d + (e.name || '普渡') + (e.note || '');
 }
-function puduQty(p){
-  var s = num(p.boxes) ? num(p.boxes) + '箱' : '';
-  if(num(p.bags)) s += num(p.bags) + '包';
-  return s || '—';
-}
+function puduQty(p){ return qtyText(puduBags(p)); }
 
 function viewPudu(){
   var T = puduTotals();
@@ -948,14 +980,19 @@ function viewPudu(){
     + '</div>'
     + '<div class="field"><label>米種與規格（印在標題上）</label>'
     + '<input class="input" data-pe="note" placeholder="花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$" value="'+esc(ev.note||'')+'"></div>'
-    + '<div class="field"><label>一箱單價（一包＝八分之一箱）</label>'
+    + '<div class="field"><label>一箱單價（8 包 24 公斤 · 一包 3 公斤 ＝ 單價 ÷ 8）</label>'
     + '<input class="input num" inputmode="numeric" data-pe="price" value="'+esc(ev.price)+'"></div>'
     + '</div>';
   h += '<div class="summary">'
     + '<div class="row"><span>登記人數</span><span class="num" data-pd="n" style="font-size:20px">'+pud().rows.length+'</span></div>'
-    + '<div class="row"><span>白米合計</span><span class="num" data-pd="qty" style="font-size:20px">'+T.boxes+' 箱 '+T.bags+' 包</span></div>'
+    + '<div class="row"><span>白米合計</span><span class="num" data-pd="qty" style="font-size:20px">'
+    + T.boxes+' 箱 '+T.bags+' 包（共 '+T.bagsTotal+' 包）</span></div>'
+    + '<div class="row"><span>核算應收（'+T.bagsTotal+' 包 × '+fmt(Math.round(bagPrice()))+'）</span>'
+    + '<span class="num" data-pd="auto" style="font-size:20px">'+fmt(T.auto)+'</span></div>'
     + '<div class="rule"></div>'
     + '<div class="row"><span>金額合計</span><span class="big" data-pd="due">NT$'+fmt(T.due)+'</span></div>'
+    + '<div class="row"><span>與核算差額</span><span class="num'+(T.diff?' neg':'')+'" data-pd="diff" style="font-size:20px">'
+    + (T.diff>0?'+':'')+fmt(T.diff)+'</span></div>'
     + '<div class="row"><span>已收</span><span class="num" data-pd="paid" style="font-size:20px">'+fmt(T.paid)+'</span></div>'
     + '<div class="row"><span>尚未收齊</span><span class="num'+(T.unpaid>0?' neg':'')+'" data-pd="unpaid" style="font-size:20px">'+fmt(T.unpaid)+'</span></div>'
     + '</div>';
@@ -973,7 +1010,7 @@ function viewPudu(){
           + '<input class="input bare num" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="boxes" value="'+esc(p.boxes)+'"></div>'
           + '<div class="fee-f"><div class="tag">零包</div>'
           + '<input class="input bare num" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="bags" value="'+esc(p.bags)+'"></div>'
-          + '<div class="fee-f wide"><div class="tag">金額（空白＝自動 '+fmt(auto)+'）</div><div class="amt-in"><span>NT$</span>'
+          + '<div class="fee-f wide"><div class="tag">'+esc(puduQty(p))+' ＝ 自動 '+fmt(auto)+'</div><div class="amt-in"><span>NT$</span>'
           + '<input class="input bare" placeholder="'+fmt(auto)+'" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="amount" value="'+esc(p.amount)+'"></div></div>'
           + '</div></div>';
       }).join('') : '<div class="muted">還沒有人登記普渡。</div>')
@@ -1023,7 +1060,7 @@ function viewPast(){
         + '<div class="fee-a">'
         + '<button class="pick-open" data-trip="'+t.id+'" style="flex:1;min-width:0;text-align:left;background:transparent;border:none;cursor:pointer;padding:0">'
         + '<span class="nm">'+esc(t.place||'未命名')+'</span>'
-        + '<br><span class="mt">'+esc(t.date||'—')+' · '+t.going.length+' 位'+(on?' · 目前編輯中':'')+'</span></button>'
+        + '<br><span class="mt">'+esc(t.date||'—')+' · '+t.fees.length+' 位'+(on?' · 目前編輯中':'')+'</span></button>'
         + '<span style="text-align:right"><span class="num" style="font-size:16px">NT$'+fmt(inc)+'</span>'
         + '<br><span class="num" style="font-size:12px;color:var(--n600)">餘 '+fmt(bal)+'</span></span>'
         + '<button class="x" data-deltrip="'+t.id+'" aria-label="刪除整場">'+X+'</button>'
@@ -1143,7 +1180,7 @@ function viewPuduSheet(){
           + '<div class="c-r" style="width:64px'+(p.paid?'':';color:var(--danger)')+'">'+(p.paid?'付清':'—')+'</div></div>';
       }).join('')
     + '<div class="trow" style="border-bottom:none"><div style="flex:1.6;color:var(--n700)">合計 '+pud().rows.length+' 位</div>'
-    + '<div class="c-r" style="width:84px;font-weight:500">'+T.boxes+'箱'+(T.bags?T.bags+'包':'')+'</div>'
+    + '<div class="c-r" style="width:84px;font-weight:500">'+qtyText(T.bagsTotal)+'</div>'
     + '<div class="c-r" style="width:132px;font-weight:500">'+fmt(T.due)+'$</div>'
     + '<div class="c-r" style="width:64px">'+fmt(T.paid)+'</div></div>'
     + '<div class="foot">製表 '+today()+' · 聖義堂班長 · 未收 '+fmt(T.unpaid)+'$</div></div>';
@@ -1207,7 +1244,11 @@ function refreshPudu(){
   var T = puduTotals();
   function set(k,v){ var el = box.querySelector('[data-pd="'+k+'"]'); if(el) el.textContent = v; }
   set('n', pud().rows.length);
-  set('qty', T.boxes + ' 箱 ' + T.bags + ' 包');
+  set('qty', T.boxes + ' 箱 ' + T.bags + ' 包（共 ' + T.bagsTotal + ' 包）');
+  set('auto', fmt(T.auto));
+  set('diff', (T.diff>0?'+':'') + fmt(T.diff));
+  var df = box.querySelector('[data-pd="diff"]');
+  if(df) df.className = 'num' + (T.diff ? ' neg' : '');
   set('due', 'NT$' + fmt(T.due));
   set('paid', fmt(T.paid));
   set('unpaid', fmt(T.unpaid));
@@ -1303,7 +1344,6 @@ document.addEventListener('click', function(e){
   if(a === 'toroster'){ S.tab = 'roster'; S.screen = null; return render(); }
 
   if(a === 'fillfees'){ openPicker('fees'); return; }
-  if(a === 'fillgoing'){ openPicker('going'); return; }
   if(a === 'fillpudu'){ openPicker('pudu'); return; }
   if(a === 'pickclose'){ closePicker(); return; }
   if(a === 'pickall'){
