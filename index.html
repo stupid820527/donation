@@ -345,7 +345,7 @@ function load(){
         if(!ev.price) ev.price = 1680;
         ev.rows.forEach(function(p){
           if(p.tables !== undefined && p.boxes === undefined){ p.boxes = p.tables; p.bags = p.rice || ''; delete p.tables; delete p.rice; }
-          if(p.amount === undefined) p.amount = '';
+          p.amount = '';
           if(p.paid === undefined) p.paid = false;
         });
       });
@@ -987,12 +987,11 @@ function viewPudu(){
     + '<div class="row"><span>登記人數</span><span class="num" data-pd="n" style="font-size:20px">'+pud().rows.length+'</span></div>'
     + '<div class="row"><span>白米合計</span><span class="num" data-pd="qty" style="font-size:20px">'
     + T.boxes+' 箱 '+T.bags+' 包（共 '+T.bagsTotal+' 包）</span></div>'
-    + '<div class="row"><span>核算應收（'+T.bagsTotal+' 包 × '+fmt(Math.round(bagPrice()))+'）</span>'
-    + '<span class="num" data-pd="auto" style="font-size:20px">'+fmt(T.auto)+'</span></div>'
+    + '<div class="row"><span>單價</span><span class="num" data-pd="auto" style="font-size:20px">'
+    + fmt(Math.round(bagPrice()))+' / 包 · '+fmt(num(pud().price))+' / 箱</span></div>'
     + '<div class="rule"></div>'
     + '<div class="row"><span>金額合計</span><span class="big" data-pd="due">NT$'+fmt(T.due)+'</span></div>'
-    + '<div class="row"><span>與核算差額</span><span class="num'+(T.diff?' neg':'')+'" data-pd="diff" style="font-size:20px">'
-    + (T.diff>0?'+':'')+fmt(T.diff)+'</span></div>'
+
     + '<div class="row"><span>已收</span><span class="num" data-pd="paid" style="font-size:20px">'+fmt(T.paid)+'</span></div>'
     + '<div class="row"><span>尚未收齊</span><span class="num'+(T.unpaid>0?' neg':'')+'" data-pd="unpaid" style="font-size:20px">'+fmt(T.unpaid)+'</span></div>'
     + '</div>';
@@ -1010,8 +1009,9 @@ function viewPudu(){
           + '<input class="input bare num" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="boxes" value="'+esc(p.boxes)+'"></div>'
           + '<div class="fee-f"><div class="tag">零包</div>'
           + '<input class="input bare num" placeholder="0" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="bags" value="'+esc(p.bags)+'"></div>'
-          + '<div class="fee-f wide"><div class="tag">'+esc(puduQty(p))+' ＝ 自動 '+fmt(auto)+'</div><div class="amt-in"><span>NT$</span>'
-          + '<input class="input bare" placeholder="'+fmt(auto)+'" inputmode="numeric" data-list="pudu" data-i="'+i+'" data-k="amount" value="'+esc(p.amount)+'"></div></div>'
+          + '<div class="fee-f wide"><div class="tag">金額（'+esc(puduQty(p))+' × '+fmt(Math.round(bagPrice()))+'/包）</div>'
+          + '<div class="amt-in" style="border-bottom:1px solid rgba(32,31,29,.28)"><span>NT$</span>'
+          + '<span class="num" data-amt="'+i+'" style="font-size:18px;font-weight:500;padding:6px 0">'+fmt(auto)+'</span></div></div>'
           + '</div></div>';
       }).join('') : '<div class="muted">還沒有人登記普渡。</div>')
     + '</div>';
@@ -1201,7 +1201,13 @@ document.addEventListener('input', function(e){
   if(el.dataset.pe){
     pud()[el.dataset.pe] = el.value;
     save();
-    if(el.dataset.pe === 'price') refreshPudu();
+    if(el.dataset.pe === 'price'){
+      pud().rows.forEach(function(p, ix){
+        var c = document.querySelector('[data-amt="'+ix+'"]');
+        if(c) c.textContent = fmt(puduAmount(p));
+      });
+      refreshPudu();
+    }
     return;
   }
   if(el.dataset.f){
@@ -1214,7 +1220,14 @@ document.addEventListener('input', function(e){
     listOf(el.dataset.list)[+el.dataset.i][el.dataset.k] = el.value;
     save();
     if(el.dataset.list === 'costs' || el.dataset.list === 'sponsors' || el.dataset.list === 'fees') refreshSummary();
-    if(el.dataset.list === 'pudu') refreshPudu();
+    if(el.dataset.list === 'pudu'){
+      if(el.dataset.k === 'boxes' || el.dataset.k === 'bags'){
+        var pr = pud().rows[+el.dataset.i];
+        var cell = document.querySelector('[data-amt="'+el.dataset.i+'"]');
+        if(cell && pr) cell.textContent = fmt(puduAmount(pr));
+      }
+      refreshPudu();
+    }
   }
 });
 
@@ -1245,10 +1258,7 @@ function refreshPudu(){
   function set(k,v){ var el = box.querySelector('[data-pd="'+k+'"]'); if(el) el.textContent = v; }
   set('n', pud().rows.length);
   set('qty', T.boxes + ' 箱 ' + T.bags + ' 包（共 ' + T.bagsTotal + ' 包）');
-  set('auto', fmt(T.auto));
-  set('diff', (T.diff>0?'+':'') + fmt(T.diff));
-  var df = box.querySelector('[data-pd="diff"]');
-  if(df) df.className = 'num' + (T.diff ? ' neg' : '');
+  set('auto', fmt(Math.round(bagPrice())) + ' / 包 · ' + fmt(num(pud().price)) + ' / 箱');
   set('due', 'NT$' + fmt(T.due));
   set('paid', fmt(T.paid));
   set('unpaid', fmt(T.unpaid));
