@@ -662,134 +662,200 @@ function summaryHtml(t){
     + '</div>';
 }
 
-function xesc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
-function xcell(v, isNum){
-  if(isNum) return '<Cell ss:Type="Number"><Data ss:Type="Number">'+(num(v)||0)+'</Data></Cell>';
-  return '<Cell ss:Type="String"><Data ss:Type="String">'+xesc(v)+'</Data></Cell>';
+function xesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+/* ── 真正的 .xlsx 產生器（store-only zip） ───────────── */
+var CRCT = (function(){
+  var t = [], c, n, k;
+  for(n=0;n<256;n++){ c=n; for(k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[n]=c>>>0; }
+  return t;
+})();
+function crc32(buf){
+  var c = 0xFFFFFFFF;
+  for(var i=0;i<buf.length;i++) c = CRCT[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
 }
-function xrow(cells){ return '<Row>'+cells.join('')+'</Row>'; }
-function xsheet(name, rows){
-  return '<Worksheet ss:Name="'+xesc(name)+'"><Table>'+rows.join('')+'</Table></Worksheet>';
+function zipStore(files){
+  var enc = new TextEncoder(), parts = [], central = [], offset = 0;
+  function u16(n){ return [n & 255, (n>>>8) & 255]; }
+  function u32(n){ return [n & 255, (n>>>8) & 255, (n>>>16) & 255, (n>>>24) & 255]; }
+  files.forEach(function(f){
+    var nameB = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    var head = [].concat([80,75,3,4], u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(crc), u32(data.length), u32(data.length), u16(nameB.length), u16(0));
+    parts.push(new Uint8Array(head), nameB, data);
+    central.push({name:nameB, crc:crc, size:data.length, off:offset});
+    offset += head.length + nameB.length + data.length;
+  });
+  var cd = [], cdLen = 0;
+  central.forEach(function(c){
+    var h = [].concat([80,75,1,2], u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+      u32(c.crc), u32(c.size), u32(c.size), u16(c.name.length),
+      u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.off));
+    cd.push(new Uint8Array(h), c.name);
+    cdLen += h.length + c.name.length;
+  });
+  var endRec = new Uint8Array([].concat([80,75,5,6], u16(0), u16(0),
+    u16(central.length), u16(central.length), u32(cdLen), u32(offset), u16(0)));
+  return new Blob(parts.concat(cd, [endRec]), {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
-var XSTYLES = '<Styles>'
-  + '<Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/>'
-  + '<Font ss:FontName="新細明體" x:CharSet="136" ss:Size="11" xmlns:x="urn:schemas-microsoft-com:office:excel"/></Style>'
-  + '<Style ss:ID="title"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="新細明體" ss:Size="28" ss:Bold="1"/></Style>'
-  + '<Style ss:ID="head"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="新細明體" ss:Size="22" ss:Bold="1"/>'
-  + '<Interior ss:Color="#EEECE1" ss:Pattern="Solid"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="name"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="細明體" ss:Size="22" ss:Bold="1"/>'
-  + '<Interior ss:Color="#EEECE1" ss:Pattern="Solid"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="idx"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="新細明體" ss:Size="22" ss:Bold="1"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="cell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="新細明體" ss:Size="22"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="item"><Alignment ss:Horizontal="Left" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="新細明體" ss:Size="22" ss:Bold="1"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="ptitle"><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>'
-  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="28" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="phead"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="16" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="pcell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="20" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="psmall"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="12" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '<Style ss:ID="pcellS"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/>'
-  + '<Font ss:FontName="標楷體" x:CharSet="136" ss:Size="13" ss:Bold="1" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
-  + '<Borders><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/>'
-  + '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'
-  + '</Styles>';
+
+/* 樣式表：索引對應 XS.* */
+var XS = {def:0, title:1, head:2, name:3, idx:4, cell:5, item:6,
+  ptitle:7, phead:8, pcell:9, psmall:10, pcellS:11};
+
+function stylesXml(){
+  function font(sz, bold, face){
+    return '<font><sz val="'+sz+'"/><name val="'+face+'"/><charset val="136"/>'+(bold?'<b/>':'')+'</font>';
+  }
+  var fonts = [font(11,0,'新細明體'), font(28,1,'新細明體'), font(22,1,'新細明體'),
+    font(22,1,'細明體'), font(22,0,'新細明體'), font(28,1,'標楷體'), font(16,1,'標楷體'),
+    font(20,1,'標楷體'), font(12,1,'標楷體'), font(13,1,'標楷體')];
+  var bd = '<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border>';
+  function xf(fi, fill, border, h, wrap){
+    return '<xf numFmtId="0" fontId="'+fi+'" fillId="'+fill+'" borderId="'+border+'" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+      + '<alignment horizontal="'+h+'" vertical="center"'+(wrap?' wrapText="1"':'')+'/></xf>';
+  }
+  var xfs = [
+    xf(0,0,0,'general'),        // def
+    xf(1,0,0,'center'),         // title
+    xf(2,2,1,'center'),         // head
+    xf(3,2,1,'center'),         // name
+    xf(2,0,1,'center'),         // idx
+    xf(4,0,1,'center'),         // cell
+    xf(2,0,1,'left'),           // item
+    xf(5,0,1,'center',1),       // ptitle
+    xf(6,0,1,'center'),         // phead
+    xf(7,0,1,'center'),         // pcell
+    xf(8,0,1,'center'),         // psmall
+    xf(9,0,1,'center')          // pcellS
+  ];
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'
+    + '<fills count="3"><fill><patternFill patternType="none"/></fill>'
+    + '<fill><patternFill patternType="gray125"/></fill>'
+    + '<fill><patternFill patternType="solid"><fgColor rgb="FFEEECE1"/><bgColor indexed="64"/></patternFill></fill></fills>'
+    + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+bd+'</borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + '<cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs>'
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+}
+
+function colName(i){
+  var s = '';
+  while(i > 0){ var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = ((i - m) / 26) | 0; }
+  return s;
+}
+
+/* sheet = {name, cols:[px], rows:[{h:px, cells:[{c,v,n,s,across}]}], fitWidth} */
+function sheetXml(sh){
+  var merges = [];
+  var rowsX = sh.rows.map(function(r, ri){
+    var rn = ri + 1, ci = 0;
+    var cells = (r.cells || []).map(function(cell){
+      ci = cell.c || (ci + 1);
+      var ref = colName(ci) + rn;
+      if(cell.across) merges.push(ref + ':' + colName(ci + cell.across) + rn);
+      var sIdx = cell.s || 0, body = '';
+      if(cell.v !== '' && cell.v !== null && cell.v !== undefined){
+        body = cell.n
+          ? '<v>' + (num(cell.v) || 0) + '</v>'
+          : '<is><t xml:space="preserve">' + xesc(cell.v) + '</t></is>';
+      }
+      var t = (cell.n || !body) ? '' : ' t="inlineStr"';
+      var out = '<c r="' + ref + '" s="' + sIdx + '"' + t + '>' + body + '</c>';
+      if(cell.across) ci += cell.across;
+      return out;
+    }).join('');
+    return '<row r="' + rn + '"' + (r.h ? ' ht="' + (r.h * 0.75).toFixed(1) + '" customHeight="1"' : '') + '>' + cells + '</row>';
+  }).join('');
+
+  var cols = (sh.cols || []).map(function(px, i){
+    return '<col min="' + (i+1) + '" max="' + (i+1) + '" width="' + (px / 7.2).toFixed(2) + '" customWidth="1"/>';
+  }).join('');
+
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
+    + '<sheetFormatPr defaultRowHeight="18"/>'
+    + (cols ? '<cols>' + cols + '</cols>' : '')
+    + '<sheetData>' + rowsX + '</sheetData>'
+    + (merges.length ? '<mergeCells count="' + merges.length + '">'
+        + merges.map(function(m){ return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>' : '')
+    + '<pageMargins left="0.25" right="0.25" top="0.3" bottom="0.3" header="0.2" footer="0.2"/>'
+    + '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="'+(sh.fitPage ? 1 : 0)+'"/>'
+    + '</worksheet>';
+}
 
 function xdownload(sheets, filename){
-  var xml = '<?xml version="1.0" encoding="UTF-8"?>'
-    + '<?mso-application progid="Excel.Sheet"?>'
-    + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office"'
-    + ' xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
-    + XSTYLES + sheets.join('') + '</Workbook>';
-  var url = URL.createObjectURL(new Blob(['\ufeff'+xml], {type:'application/xml;charset=utf-8'}));
+  var files = [
+    {name:'[Content_Types].xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      + '<Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + sheets.map(function(s,i){ return '<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('')
+      + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+      + '</Types>'},
+    {name:'_rels/.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+      + '</Relationships>'},
+    {name:'xl/workbook.xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+      + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+      + sheets.map(function(s,i){
+          return '<sheet name="'+xesc(String(s.name||('工作表'+(i+1))).slice(0,28))+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>';
+        }).join('')
+      + '</sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + sheets.map(function(s,i){
+          return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>';
+        }).join('')
+      + '<Relationship Id="rId'+(sheets.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      + '</Relationships>'},
+    {name:'xl/styles.xml', data:stylesXml()}
+  ];
+  sheets.forEach(function(s,i){ files.push({name:'xl/worksheets/sheet'+(i+1)+'.xml', data:sheetXml(s)}); });
+
+  var url = URL.createObjectURL(zipStore(files));
   var link = document.createElement('a');
-  link.href = url; link.download = filename;
+  link.href = url;
+  link.download = filename;
   link.click();
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
 
 function downloadPuduExcel(){
-  var T = puduTotals();
+  var T = puduTotals(), list = pud().rows, n = list.length;
+  var small = n > 34;
+  var rh = n > 44 ? 30 : (n > 34 ? 34 : (n > 26 ? 40 : 50));
+  var body = small ? XS.pcellS : XS.pcell;
   var rows = [];
-  var n = pud().rows.length;
-  var rh = n > 44 ? 22 : (n > 34 ? 27 : (n > 26 ? 34 : 50));
-  var big = n > 34 ? 'pcellS' : 'pcell';
-  rows.push('<Row ht="'+(n>34?52:72)+'"><Cell ss:MergeAcross="3" ss:StyleID="ptitle"><Data ss:Type="String">'
-    + xesc(puduTitle()) + '</Data></Cell></Row>');
-  rows.push('<Row ht="40">'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">姓名</Data></Cell>'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">白米(箱)</Data></Cell>'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">金額</Data></Cell>'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">已收</Data></Cell></Row>');
-  pud().rows.forEach(function(p){
-    var amt = String(p.amount).trim() ? num(p.amount) : puduAmount(p);
-    rows.push('<Row ht="'+rh+'">'
-      + '<Cell ss:StyleID="'+big+'"><Data ss:Type="String">'+xesc(p.name||'')+'</Data></Cell>'
-      + '<Cell ss:StyleID="'+big+'"><Data ss:Type="String">'+xesc(puduQty(p) === '—' ? '' : puduQty(p))+'</Data></Cell>'
-      + '<Cell ss:StyleID="'+big+'"><Data ss:Type="String">'+xesc(fmt(amt)+'$')+'</Data></Cell>'
-      + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+(p.paid?'付清':'')+'</Data></Cell></Row>');
+
+  rows.push({h:(small?52:72), cells:[{c:1, v:puduTitle(), s:XS.ptitle, across:3}]});
+  rows.push({h:40, cells:[
+    {c:1, v:'姓名', s:XS.phead}, {v:'白米(箱)', s:XS.phead},
+    {v:'金額', s:XS.phead}, {v:'已收', s:XS.phead}]});
+
+  list.forEach(function(p){
+    rows.push({h:rh, cells:[
+      {c:1, v:p.name||'', s:body},
+      {v:puduQty(p) === '—' ? '' : puduQty(p), s:body},
+      {v:puduAmount(p), n:true, s:body},
+      {v:p.paid ? '付清' : '', s:XS.psmall}]});
   });
-  rows.push('<Row ht="'+rh+'">'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc('合計 '+pud().rows.length+' 位')+'</Data></Cell>'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(qtyText(T.bagsTotal))+'</Data></Cell>'
-    + '<Cell ss:StyleID="phead"><Data ss:Type="String">'+xesc(fmt(T.due)+'$')+'</Data></Cell>'
-    + '<Cell ss:StyleID="psmall"><Data ss:Type="String">'+xesc('已收 '+fmt(T.paid))+'</Data></Cell></Row>');
 
-  var sheet = '<Worksheet ss:Name="'+xesc((pud().year||'')+'年普渡')+'"><Table ss:DefaultRowHeight="'+rh+'">'
-    + '<Column ss:Width="183"/><Column ss:Width="92"/><Column ss:Width="156"/><Column ss:Width="106"/>'
-    + rows.join('') + '</Table>'
-    + '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'
-    + '<PageSetup><PageMargins x:Bottom="0.25" x:Left="0.25" x:Right="0.25" x:Top="0.25" xmlns:x="urn:schemas-microsoft-com:office:excel"/></PageSetup>'
-    + '<Print><ValidPrinterInfo/><PaperSizeIndex>9</PaperSizeIndex><FitWidth>1</FitWidth><FitHeight>1</FitHeight><FitToPage/></Print>'
-    + '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>2</SplitHorizontal><TopRowBottomPane>2</TopRowBottomPane>'
-    + '<ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
+  rows.push({h:rh, cells:[
+    {c:1, v:'合計 '+n+' 位', s:XS.phead},
+    {v:qtyText(T.bagsTotal), s:XS.phead},
+    {v:T.due, n:true, s:XS.phead},
+    {v:'已收 '+fmt(T.paid), s:XS.psmall}]});
 
-  xdownload([sheet], (pud().year||'') + '年' + (pud().name||'普渡') + '名單.xml');
+  xdownload([{name:(pud().year||'')+'年普渡', cols:[183,92,156,106], rows:rows, fitPage:true}],
+    (pud().year||'') + '年' + (pud().name||'普渡') + '名單.xlsx');
 }
 
 function rocTitle(t){
@@ -808,7 +874,6 @@ function downloadExcel(){
   var t = trip();
   var fees = t.fees, costs = t.costs, spons = t.sponsors;
 
-  /* 右欄依序：費用項目 → 空一列 → 贊助標題 → 贊助明細 */
   var right = costs.map(function(c){ return {kind:'item', name:c.name, amt:c.amount}; });
   right.push({kind:'gap'});
   right.push({kind:'head', name:'贊助'});
@@ -817,51 +882,41 @@ function downloadExcel(){
   var n = Math.max(fees.length, right.length);
   var rows = [];
 
-  rows.push('<Row ht="41"><Cell ss:Index="2" ss:MergeAcross="3" ss:StyleID="title">'
-    + '<Data ss:Type="String">' + xesc(rocTitle(t)) + '</Data></Cell></Row>');
-
-  rows.push('<Row ht="39">'
-    + '<Cell ss:Index="2" ss:StyleID="head"><Data ss:Type="String">姓名</Data></Cell>'
-    + '<Cell ss:StyleID="head"><Data ss:Type="String">桌號</Data></Cell>'
-    + '<Cell ss:StyleID="head"><Data ss:Type="String">費用</Data></Cell>'
-    + '<Cell ss:Index="6" ss:StyleID="head"><Data ss:Type="String">費用</Data></Cell></Row>');
+  rows.push({h:41, cells:[{c:2, v:rocTitle(t), s:XS.title, across:3}]});
+  rows.push({h:39, cells:[
+    {c:2, v:'姓名', s:XS.head}, {v:'桌號', s:XS.head}, {v:'費用', s:XS.head},
+    {c:6, v:'費用', s:XS.head}]});
 
   for(var i=0;i<n;i++){
-    var fe = fees[i], rt = right[i], cells = '';
+    var fe = fees[i], rt = right[i], cells = [];
     if(fe){
-      cells += '<Cell ss:StyleID="idx"><Data ss:Type="Number">'+(i+1)+'</Data></Cell>'
-        + '<Cell ss:StyleID="name"><Data ss:Type="String">'+xesc(fe.name||'')+'</Data></Cell>'
-        + '<Cell ss:StyleID="cell"><Data ss:Type="String">'+xesc(fe.table||'')+'</Data></Cell>'
-        + '<Cell ss:StyleID="cell">'+(String(fe.due||'').trim() ? '<Data ss:Type="Number">'+num(fe.due)+'</Data>' : '')+'</Cell>';
+      cells.push({c:1, v:i+1, n:true, s:XS.idx});
+      cells.push({v:fe.name||'', s:XS.name});
+      cells.push({v:fe.table||'', s:XS.cell});
+      cells.push(String(fe.due||'').trim() ? {v:num(fe.due), n:true, s:XS.cell} : {v:'', s:XS.cell});
     }
     if(rt && rt.kind !== 'gap'){
-      var st = rt.kind === 'head' ? 'head' : 'item';
-      cells += '<Cell ss:Index="5" ss:StyleID="'+st+'"><Data ss:Type="String">'+xesc(rt.name||'')+'</Data></Cell>';
-      if(rt.kind === 'head') cells += '<Cell ss:StyleID="head"></Cell>';
-      else cells += '<Cell ss:StyleID="cell">'+(String(rt.amt||'').trim() ? '<Data ss:Type="Number">'+num(rt.amt)+'</Data>' : '')+'</Cell>';
+      var st = rt.kind === 'head' ? XS.head : XS.item;
+      cells.push({c:5, v:rt.name||'', s:st});
+      cells.push(rt.kind === 'head'
+        ? {v:'', s:XS.head}
+        : (String(rt.amt||'').trim() ? {v:num(rt.amt), n:true, s:XS.cell} : {v:'', s:XS.cell}));
     }
-    rows.push('<Row ht="39">'+cells+'</Row>');
+    rows.push({h:39, cells:cells});
   }
 
-  var cols = '<Column ss:Width="58"/><Column ss:Width="196"/><Column ss:Width="71"/>'
-    + '<Column ss:Width="112"/><Column ss:Width="282"/><Column ss:Width="202"/>';
+  var sheet1 = {name:(t.place||'出遊').slice(0,24), cols:[58,196,71,112,282,202], rows:rows};
 
-  var sheet1 = '<Worksheet ss:Name="'+xesc((t.place||'出遊').slice(0,24))+'"><Table ss:DefaultRowHeight="39">'
-    + cols + rows.join('') + '</Table>'
-    + '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'
-    + '<PageSetup><Layout x:Orientation="Portrait" xmlns:x="urn:schemas-microsoft-com:office:excel"/>'
-    + '<PageMargins x:Bottom="0.2" x:Left="0.24" x:Right="0.2" x:Top="0.2" xmlns:x="urn:schemas-microsoft-com:office:excel"/></PageSetup>'
-    + '<Print><PaperSizeIndex>9</PaperSizeIndex><Scale>80</Scale></Print>'
-    + '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>2</SplitHorizontal><TopRowBottomPane>2</TopRowBottomPane>'
-    + '<ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
-
-  /* 保險名單另開一頁，格式不變 */
   var g = goingPeople(t);
-  var iRows = [xrow([xcell('姓名'),xcell('出生年月日'),xcell('身分證字號')])];
-  g.forEach(function(p){ iRows.push(xrow([xcell(p.name),xcell(p.birth),xcell(p.id)])); });
+  var iRows = [{h:34, cells:[
+    {c:1, v:'姓名', s:XS.phead}, {v:'出生年月日', s:XS.phead}, {v:'身分證字號', s:XS.phead}]}];
+  g.forEach(function(p){
+    iRows.push({h:30, cells:[
+      {c:1, v:p.name||'', s:XS.pcellS}, {v:p.birth||'', s:XS.pcellS}, {v:p.id||'', s:XS.pcellS}]});
+  });
 
-  xdownload([sheet1, xsheet('保險名單', iRows)],
-    String(t.date||'').replace(/\./g,'') + (t.place||'出遊') + '收費名單.xml');
+  xdownload([sheet1, {name:'保險名單', cols:[168,168,196], rows:iRows}],
+    String(t.date||'').replace(/\./g,'') + (t.place||'出遊') + '收費名單.xlsx');
 }
 
 /* ── 名冊挑選器 ── */
