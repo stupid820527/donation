@@ -746,7 +746,7 @@ function xdownload(sheets, filename){
     + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office"'
     + ' xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
     + XSTYLES + sheets.join('') + '</Workbook>';
-  var url = URL.createObjectURL(new Blob(['\ufeff'+xml], {type:'application/vnd.ms-excel'}));
+  var url = URL.createObjectURL(new Blob(['\ufeff'+xml], {type:'application/xml;charset=utf-8'}));
   var link = document.createElement('a');
   link.href = url; link.download = filename;
   link.click();
@@ -789,7 +789,7 @@ function downloadPuduExcel(){
     + '<FreezePanes/><FrozenNoSplit/><SplitHorizontal>2</SplitHorizontal><TopRowBottomPane>2</TopRowBottomPane>'
     + '<ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
 
-  xdownload([sheet], (pud().year||'') + '年' + (pud().name||'普渡') + '名單.xls');
+  xdownload([sheet], (pud().year||'') + '年' + (pud().name||'普渡') + '名單.xml');
 }
 
 function rocTitle(t){
@@ -861,7 +861,7 @@ function downloadExcel(){
   g.forEach(function(p){ iRows.push(xrow([xcell(p.name),xcell(p.birth),xcell(p.id)])); });
 
   xdownload([sheet1, xsheet('保險名單', iRows)],
-    String(t.date||'').replace(/\./g,'') + (t.place||'出遊') + '收費名單.xls');
+    String(t.date||'').replace(/\./g,'') + (t.place||'出遊') + '收費名單.xml');
 }
 
 /* ── 名冊挑選器 ── */
