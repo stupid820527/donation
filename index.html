@@ -1193,7 +1193,7 @@ function viewInsure(t){
 function viewPuduSheet(){
   var T = puduTotals();
   var rows = pud().rows, n = rows.length;
-  var fs = n > 44 ? 15 : (n > 36 ? 16 : (n > 28 ? 17 : (n > 20 ? 19 : 22)));
+  var fs = n > 26 ? 13 : 14;
   var w = function(m){ return Math.round(fs * m) + 'px'; };
 
   var body = '<div class="sheet">'
