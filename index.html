@@ -180,6 +180,7 @@ button{font:inherit}
   #print-area .sheet{border:none;background:#fff;padding:0;gap:16px}
   #print-area .sheet[data-fit]{transform:scale(var(--fit,1));transform-origin:top left;width:calc(100% / var(--fit,1));gap:10px}
   #print-area .sheet[data-fit] .trow{padding:4px 0}
+  #print-area .trow{break-inside:avoid;page-break-inside:avoid}
   .trow,.sr{break-inside:avoid}
   @page{margin:16mm}
 }
@@ -1249,7 +1250,7 @@ function viewPuduPlain(){
   var sub = (e.year ? e.year + '年' : '') + (e.date || '');
 
   function col(list, from){
-    return '<div style="flex:1;min-width:0">'
+    return '<div style="flex:1;min-width:0;break-inside:avoid;page-break-inside:avoid">'
       + '<div class="thead" style="font-size:'+Math.round(fs*0.62)+'px">'
       + '<div style="flex:1">姓名</div><div class="c-r" style="width:'+(fs*4.4)+'px">白米</div></div>'
       + list.map(function(p,i){
@@ -1265,7 +1266,7 @@ function viewPuduPlain(){
     + '<div class="hd"><h3 style="font-size:'+(twoCol?32:36)+'px;font-weight:600;line-height:1.25">'+esc(head)+'</h3>'
     + (sub ? '<div class="sub" style="font-size:'+Math.round(fs*0.7)+'px;margin-top:3px">'+esc(sub)+'</div>' : '')
     + '<div class="dash"></div></div>'
-    + '<div style="display:flex;gap:26px;align-items:flex-start">'
+    + '<div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap">'
     + col(rows.slice(0, half), 0)
     + (twoCol && rows.length > half ? col(rows.slice(half), half) : '')
     + '</div>'
