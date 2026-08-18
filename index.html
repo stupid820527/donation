@@ -1245,7 +1245,8 @@ function viewPuduPlain(){
   var per = twoCol ? half : n;
   var fs = per > 30 ? 22 : (per > 26 ? 24 : (per > 22 ? 27 : (per > 18 ? 30 : 34)));
   var e = pud();
-  var head = (e.year ? e.year + '年' : '') + (e.date || '') + (e.name || '普渡') + ' 米名單';
+  var head = (e.name || '普渡') + ' 米名單';
+  var sub = (e.year ? e.year + '年' : '') + (e.date || '');
 
   function col(list, from){
     return '<div style="flex:1;min-width:0">'
@@ -1262,6 +1263,7 @@ function viewPuduPlain(){
 
   var body = '<div class="sheet">'
     + '<div class="hd"><h3 style="font-size:'+(twoCol?32:36)+'px;font-weight:600;line-height:1.25">'+esc(head)+'</h3>'
+    + (sub ? '<div class="sub" style="font-size:'+Math.round(fs*0.7)+'px;margin-top:3px">'+esc(sub)+'</div>' : '')
     + '<div class="dash"></div></div>'
     + '<div style="display:flex;gap:26px;align-items:flex-start">'
     + col(rows.slice(0, half), 0)
@@ -1269,7 +1271,7 @@ function viewPuduPlain(){
     + '</div>'
     + '<div class="dash"></div>'
     + '<div class="trow" style="border-bottom:none;font-size:'+Math.round(fs*0.95)+'px">'
-    + '<div style="flex:1;color:var(--n700)">共 '+n+' 位</div>'
+    + '<div style="flex:1"></div>'
     + '<div class="c-r" style="width:'+Math.round(fs*8)+'px;font-weight:500">白米 '+esc(qtyText(T.bagsTotal))+'</div></div>'
     + '<div class="foot">製表 '+today()+'</div></div>';
 
