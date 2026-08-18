@@ -1228,7 +1228,7 @@ function viewPuduPlain(){
   var twoCol = n > 20;
   var half = Math.ceil(n / (twoCol ? 2 : 1));
   var per = twoCol ? half : n;
-  var fs = per > 30 ? 18 : (per > 26 ? 20 : (per > 22 ? 22 : (per > 18 ? 24 : 28)));
+  var fs = per > 30 ? 22 : (per > 26 ? 24 : (per > 22 ? 27 : (per > 18 ? 30 : 34)));
   var e = pud();
   var head = (e.year ? e.year + '年' : '') + (e.date || '') + (e.name || '普渡') + ' 米名單';
 
