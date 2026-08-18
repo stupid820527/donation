@@ -529,6 +529,7 @@ function render(){
   if(S.screen === 'sheet') v.innerHTML = viewSheet(t);
   else if(S.screen === 'insure') v.innerHTML = viewInsure(t);
   else if(S.screen === 'pudusheet') v.innerHTML = viewPuduSheet();
+  else if(S.screen === 'puduplain') v.innerHTML = viewPuduPlain();
   else if(S.tab === 'trip') v.innerHTML = viewTrip(t);
   else if(S.tab === 'pudu') v.innerHTML = viewPudu();
   else if(S.tab === 'roster') v.innerHTML = viewRoster();
@@ -1020,7 +1021,8 @@ function viewPudu(){
   h += '<div class="col">'
     + '<div class="btn-row"><button class="btn btn-primary" data-add="pudu">＋ 新增一位</button>'
     + '<button class="btn btn-secondary" data-act="fillpudu">從名冊挑選</button></div>'
-    + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印 ／ PDF）</button></div>';
+    + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印 ／ PDF）</button>'
+    + '<button class="btn btn-secondary" data-act="puduplain">匯出領米名單（大字 · 不含金額）</button></div>';
   return h + '</div>';
 }
 
@@ -1214,6 +1216,41 @@ function viewPuduSheet(){
     + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
 }
 
+function viewPuduPlain(){
+  var rows = pud().rows, n = rows.length, T = puduTotals();
+  var twoCol = n > 18;
+  var half = Math.ceil(n / (twoCol ? 2 : 1));
+  var fs = twoCol ? (n > 44 ? 20 : (n > 34 ? 23 : 27)) : 30;
+  var e = pud();
+  var head = (e.year ? e.year + '年' : '') + (e.date || '') + (e.name || '普渡') + ' 領米名單';
+
+  function col(list, from){
+    return '<div style="flex:1;min-width:0">'
+      + '<div class="thead" style="font-size:'+Math.round(fs*0.62)+'px"><div style="width:'+(fs*1.6)+'px">＃</div>'
+      + '<div style="flex:1">姓名</div><div class="c-r" style="width:'+(fs*4.4)+'px">白米</div></div>'
+      + list.map(function(p,i){
+          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.28)+'px 0">'
+            + '<div class="num" style="width:'+(fs*1.6)+'px;color:var(--n600);font-size:'+Math.round(fs*0.7)+'px">'+(from+i+1)+'</div>'
+            + '<div style="flex:1;font-weight:500;letter-spacing:.02em">'+esc(p.name||'—')+'</div>'
+            + '<div class="c-r" style="width:'+(fs*4.4)+'px;font-weight:500">'+esc(puduQty(p))+'</div></div>';
+        }).join('')
+      + '</div>';
+  }
+
+  var body = '<div class="sheet">'
+    + '<div class="hd"><h3 style="font-size:'+(twoCol?26:30)+'px;line-height:1.3">'+esc(head)+'</h3>'
+    + '<div class="sub" style="font-size:'+Math.round(fs*0.6)+'px">共 '+n+' 位 · 白米 '+esc(qtyText(T.bagsTotal))+'</div>'
+    + '<div class="dash"></div></div>'
+    + '<div style="display:flex;gap:28px;align-items:flex-start">'
+    + col(rows.slice(0, half), 0)
+    + (twoCol && rows.length > half ? col(rows.slice(half), half) : '')
+    + '</div>'
+    + '<div class="foot">製表 '+today()+' · 聖義堂班長</div></div>';
+
+  return '<div class="stack">' + backBtn() + body
+    + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
+}
+
 /* ── events ───────────────────────────────────────────── */
 
 function listOf(name){
@@ -1390,6 +1427,7 @@ document.addEventListener('click', function(e){
   if(a === 'sheet'){ S.screen = 'sheet'; return render(); }
   if(a === 'insure'){ S.screen = 'insure'; return render(); }
   if(a === 'pudusheet'){ S.screen = 'pudusheet'; return render(); }
+  if(a === 'puduplain'){ S.screen = 'puduplain'; return render(); }
   if(a === 'toroster'){ S.tab = 'roster'; S.screen = null; return render(); }
 
   if(a === 'fillfees'){ openPicker('fees'); return; }
