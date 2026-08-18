@@ -179,6 +179,7 @@ button{font:inherit}
   #print-area{display:block !important;padding:0}
   #print-area .sheet{border:none;background:#fff;padding:0;gap:16px;break-inside:auto}
   #print-area .sheet + .sheet{page-break-before:always;break-before:page;padding-top:0}
+  #print-area .sheet{max-height:250mm;overflow:hidden}
   [data-noprint]{display:none !important}
   #print-area .sheet[data-fit]{transform:scale(var(--fit,1));transform-origin:top left;width:calc(100% / var(--fit,1));gap:10px}
   #print-area .sheet[data-fit] .trow{padding:4px 0}
@@ -1246,7 +1247,7 @@ function viewPuduPlain(){
   var e = pud();
   var perCol = num(S.plainPerCol) || 13;
   var perPage = num(S.plainPerPage) || perCol * 2;
-  var fs = perCol > 22 ? 20 : (perCol > 18 ? 23 : (perCol > 15 ? 26 : (perCol > 12 ? 28 : 31)));
+  var fs = perCol > 22 ? 17 : (perCol > 18 ? 19 : (perCol > 15 ? 21 : (perCol > 12 ? 23 : 25)));
   var head = (e.name || '普渡') + ' 米名單';
   var sub = (e.year ? e.year + '年' : '') + (e.date || '');
 
@@ -1257,7 +1258,7 @@ function viewPuduPlain(){
       + '<div style="flex:1">姓名</div><div class="c-r" style="width:'+Math.round(fs*4.4)+'px">白米</div></div>'
       + list.map(function(p){
           var long = String(p.name||'').trim().length > 5;
-          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.2)+'px 0">'
+          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.16)+'px 0">'
             + '<div style="flex:1;font-weight:500;letter-spacing:.02em;font-size:'+(long?Math.round(fs*0.62):fs)+'px">'+esc(p.name||'—')+'</div>'
             + '<div class="c-r" style="width:'+Math.round(fs*4.4)+'px;font-weight:500">'+esc(puduQty(p))+'</div></div>';
         }).join('')
