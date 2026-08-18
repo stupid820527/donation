@@ -177,7 +177,8 @@ button{font:inherit}
   body{background:#fff}
   .app,.tabs{display:none !important}
   #print-area{display:block !important;padding:0}
-  #print-area .sheet{border:none;background:#fff;padding:0;gap:16px}
+  #print-area .sheet{border:none;background:#fff;padding:0;gap:16px;break-inside:auto}
+  #print-area .sheet + .sheet{page-break-before:always;break-before:page;padding-top:0}
   [data-noprint]{display:none !important}
   #print-area .sheet[data-fit]{transform:scale(var(--fit,1));transform-origin:top left;width:calc(100% / var(--fit,1));gap:10px}
   #print-area .sheet[data-fit] .trow{padding:4px 0}
@@ -1270,7 +1271,7 @@ function viewPuduPlain(){
   var body = pages.map(function(pg, pi){
     return '<div class="sheet"'+(pi ? ' style="page-break-before:always"' : '')+'>'
       + '<div class="hd"><h3 style="font-size:'+(perCol>18?30:34)+'px;font-weight:600;line-height:1.25">'+esc(head)
-      + (pages.length > 1 ? '（'+(pi+1)+'／'+pages.length+'）' : '') + '</h3>'
+      + '</h3>'
       + (sub ? '<div class="sub" style="font-size:'+Math.round(fs*0.62)+'px;margin-top:3px">'+esc(sub)+'</div>' : '')
       + '<div class="dash"></div></div>'
       + '<div style="display:flex;gap:26px;align-items:flex-start">'
@@ -1568,9 +1569,11 @@ document.addEventListener('click', function(e){
   }
 
   if(a === 'print'){
-    var sheet = document.querySelector('#view .sheet');
-    if(sheet){
-      document.getElementById('print-area').innerHTML = sheet.outerHTML;
+    var sheets = document.querySelectorAll('#view .sheet');
+    if(sheets.length){
+      var html = '';
+      [].forEach.call(sheets, function(s){ html += s.outerHTML; });
+      document.getElementById('print-area').innerHTML = html;
       window.print();
     }
     return;
