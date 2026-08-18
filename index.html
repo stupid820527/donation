@@ -572,6 +572,7 @@ function viewTrip(t){
           + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="項目名稱" data-list="costs" data-i="'+i+'" data-k="name" value="'+esc(c.name)+'"></div>'
           + '<div class="amt"><div class="tag">金額</div><div class="amt-in"><span>NT$</span>'
           + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="costs" data-i="'+i+'" data-k="amount" value="'+esc(c.amount)+'"></div></div>'
+          + moveBtns('costs', i, t.costs.length)
           + '<button class="x" data-del="costs" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>';
       }).join('')
     + '</div>'
@@ -599,6 +600,7 @@ function viewTrip(t){
           + '<div class="grow"><div class="tag">姓名</div>'
           + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="fees" data-i="'+i+'" data-k="name" value="'+esc(x.name)+'"></div>'
           + '<button class="paid-t" data-paid="'+i+'" aria-label="切換已繳">'+(x.paid?'已繳':'未繳')+'</button>'
+          + moveBtns('fees', i, t.fees.length)
           + '<button class="x" data-del="fees" data-i="'+i+'" aria-label="刪除">'+X+'</button>'
           + '</div>'
           + '<div class="fee-b">'
@@ -624,6 +626,7 @@ function viewTrip(t){
           + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="sponsors" data-i="'+i+'" data-k="name" value="'+esc(s.name)+'"></div>'
           + '<div class="amt"><div class="tag">隨喜金額</div><div class="amt-in"><span>NT$</span>'
           + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="sponsors" data-i="'+i+'" data-k="amount" value="'+esc(s.amount)+'"></div></div>'
+          + moveBtns('sponsors', i, t.sponsors.length)
           + '<button class="x" data-del="sponsors" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>';
       }).join('') : '<div class="muted">還沒有人贊助，按下面新增。</div>')
     + '</div>'
@@ -946,6 +949,14 @@ function puduTotals(){
   return {bagsTotal:totalBags, boxes:q.boxes, bags:q.bags, due:due, paid:paid,
     unpaid:due - paid, auto:auto, diff:due - auto};
 }
+function moveBtns(list, i, len){
+  return '<div style="display:flex;flex-direction:column;gap:2px;flex:none">'
+    + '<button class="x" style="min-height:26px;width:34px;font-size:13px"'+(i===0?' disabled':'')
+    + ' data-move="up" data-mlist="'+list+'" data-i="'+i+'" aria-label="上移">▲</button>'
+    + '<button class="x" style="min-height:26px;width:34px;font-size:13px"'+(i===len-1?' disabled':'')
+    + ' data-move="down" data-mlist="'+list+'" data-i="'+i+'" aria-label="下移">▼</button></div>';
+}
+
 function puduTitle(){
   var e = pud();
   var d = String(e.date || '').replace(/^\s*\d{3}\s*年\s*/, '');
@@ -1006,6 +1017,7 @@ function viewPudu(){
           + '<div class="grow"><div class="tag">姓名</div>'
           + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="pudu" data-i="'+i+'" data-k="name" value="'+esc(p.name)+'"></div>'
           + '<button class="paid-t" data-pudupaid="'+i+'" aria-label="切換已收">'+(p.paid?'付清':'未收')+'</button>'
+          + moveBtns('pudu', i, pud().rows.length)
           + '<button class="x" data-del="pudu" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>'
           + '<div class="fee-b">'
           + '<div class="fee-f"><div class="tag">白米（箱）</div>'
@@ -1030,7 +1042,7 @@ function viewRoster(){
   var h = '<div class="stack">';
   var missing = S.roster.filter(function(r){ return !r.birth || !r.id; }).length;
   h += '<div class="col"><h2 style="font-size:29px">名冊</h2>'
-    + '<div class="muted">'+S.roster.length+' 位'
+    + '<div class="muted">用 ▲▼ 調整順序 · '+S.roster.length+' 位'
     + (missing ? ' · <span style="color:var(--danger)">'+missing+' 位缺投保資料</span>' : ' · 資料齊全')
     + ' · 存一次，每場出遊直接勾選</div><div class="rule"></div></div>';
   h += '<div class="col">'
@@ -1042,6 +1054,7 @@ function viewRoster(){
           + '<div class="grow"><div class="tag">出生年月日 · 身分證字號</div>'
           + '<input class="input bare num" style="font-size:14px;min-height:30px" placeholder="出生年月日" data-list="roster" data-i="'+i+'" data-k="birth" value="'+esc(r.birth)+'">'
           + '<input class="input bare num" style="font-size:14px;min-height:30px" placeholder="身分證字號" data-list="roster" data-i="'+i+'" data-k="id" value="'+esc(r.id)+'"></div>'
+          + moveBtns('roster', i, S.roster.length)
           + '<button class="x" data-del="roster" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>';
       }).join('') : '<div class="muted">名冊還是空的。按下面新增第一位。</div>')
     + '</div>';
@@ -1170,7 +1183,7 @@ function viewSheet(t){
     + '<div class="sr"><span>支出總額</span><span class="num">−'+fmt(cost)+'</span></div></div>'
     + '<div class="total"><span style="font-size:15px">剩餘餘額</span>'
     + '<span class="big" style="font-size:27px">'+(bal<0?'−NT$':'NT$')+fmt(Math.abs(bal))+'</span></div>'
-    + '<div class="foot">製表 '+today()+' · 聖義堂班長</div></div>';
+    + '<div class="foot">製表 '+today()+'</div></div>';
   return '<div class="stack">' + backBtn() + body
     + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
 }
@@ -1217,7 +1230,7 @@ function viewPuduSheet(){
     + '<div style="width:'+w(4)+';text-align:center;font-weight:500">'+qtyText(T.bagsTotal)+'</div>'
     + '<div style="width:'+w(5)+';text-align:center;font-weight:500;font-family:var(--num)">'+fmt(T.due)+'$</div>'
     + '<div class="c-r" style="width:'+w(3)+'"></div></div>'
-    + '<div class="foot">製表 '+today()+' · 聖義堂班長 · 已收 '+fmt(T.paid)+'$ · 未收 '+fmt(T.unpaid)+'$</div></div>';
+    + '<div class="foot">製表 '+today()+' · 已收 '+fmt(T.paid)+'$ · 未收 '+fmt(T.unpaid)+'$</div></div>';
 
   return '<div class="stack">' + backBtn() + body
     + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
@@ -1255,7 +1268,7 @@ function viewPuduPlain(){
     + '<div class="trow" style="border-bottom:none;font-size:'+Math.round(fs*0.95)+'px">'
     + '<div style="flex:1;color:var(--n700)">共 '+n+' 位</div>'
     + '<div class="c-r" style="width:'+Math.round(fs*8)+'px;font-weight:500">白米 '+esc(qtyText(T.bagsTotal))+'</div></div>'
-    + '<div class="foot">製表 '+today()+' · 聖義堂班長</div></div>';
+    + '<div class="foot">製表 '+today()+'</div></div>';
 
   return '<div class="stack">' + backBtn() + body
     + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
@@ -1340,7 +1353,7 @@ function refreshPudu(){
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu],[data-move]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -1375,6 +1388,14 @@ document.addEventListener('click', function(e){
   if(el.dataset.ungo){
     var tg = trip(), ix = tg.going.indexOf(el.dataset.ungo);
     if(ix > -1) tg.going.splice(ix, 1);
+    save(); return render();
+  }
+
+  if(el.dataset.move){
+    var ml = listOf(el.dataset.mlist || 'roster');
+    var mi = +el.dataset.i, mj = el.dataset.move === 'up' ? mi - 1 : mi + 1;
+    if(!ml || mj < 0 || mj >= ml.length) return;
+    var tmp = ml[mi]; ml[mi] = ml[mj]; ml[mj] = tmp;
     save(); return render();
   }
 
