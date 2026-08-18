@@ -178,6 +178,8 @@ button{font:inherit}
   .app,.tabs{display:none !important}
   #print-area{display:block !important;padding:0}
   #print-area .sheet{border:none;background:#fff;padding:0;gap:16px}
+  #print-area .sheet[data-fit]{transform:scale(var(--fit,1));transform-origin:top left;width:calc(100% / var(--fit,1));gap:10px}
+  #print-area .sheet[data-fit] .trow{padding:4px 0}
   .trow,.sr{break-inside:avoid}
   @page{margin:16mm}
 }
@@ -1018,8 +1020,7 @@ function viewPudu(){
   h += '<div class="col">'
     + '<div class="btn-row"><button class="btn btn-primary" data-add="pudu">＋ 新增一位</button>'
     + '<button class="btn btn-secondary" data-act="fillpudu">從名冊挑選</button></div>'
-    + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印檔）</button>'
-    + '<button class="btn btn-secondary" data-act="puduexcel">匯出普渡 Excel（原表格式）</button></div>';
+    + '<button class="btn btn-secondary" data-act="pudusheet">匯出普渡名單（列印 ／ PDF）</button></div>';
   return h + '</div>';
 }
 
@@ -1051,7 +1052,7 @@ function viewRoster(){
 
 function viewPast(){
   var h = '<div class="stack">';
-  h += '<div class="col"><h2 style="font-size:29px">歷次出遊</h2>'
+  h += '<div class="col"><h2 style="font-size:29px">歷次進香</h2>'
     + '<div class="muted">點一場就切換過去，資料各自獨立</div><div class="rule"></div></div>';
   h += '<div class="col">' + S.trips.map(function(t){
       var inc = income(t), bal = inc - costTotal(t);
@@ -1066,7 +1067,32 @@ function viewPast(){
         + '<button class="x" data-deltrip="'+t.id+'" aria-label="刪除整場">'+X+'</button>'
         + '</div></div>';
     }).join('') + '</div>';
-  h += '<button class="btn btn-primary" data-act="newtrip">＋ 新增一場出遊</button>';
+  h += '<button class="btn btn-primary" data-act="newtrip">＋ 新增一場進香</button>';
+
+  h += '<div class="rule"></div>';
+  h += '<div class="col"><h2 style="font-size:29px">歷年普渡</h2>'
+    + '<div class="muted">點一年就切換過去，資料各自獨立</div><div class="rule"></div></div>';
+  h += '<div class="col">' + S.puduEvents.slice().sort(function(a,b){
+      return String(b.year).localeCompare(String(a.year));
+    }).map(function(ev){
+      var bags = 0, due = 0, paid = 0;
+      ev.rows.forEach(function(p){
+        var b = num(p.boxes) * 8 + num(p.bags);
+        var amt = b * ((num(ev.price)||1680) / 8);
+        bags += b; due += amt; if(p.paid) paid += amt;
+      });
+      var on = (String(ev.id) === String(S.puduId));
+      return '<div class="fee'+(on?' paid':'')+'">'
+        + '<div class="fee-a">'
+        + '<button class="pick-open" data-pudugo="'+esc(ev.id)+'" style="flex:1;min-width:0;text-align:left;background:transparent;border:none;cursor:pointer;padding:0">'
+        + '<span class="nm">'+esc(ev.year||'—')+'年 '+esc(ev.name||'普渡')+'</span>'
+        + '<br><span class="mt">'+esc(ev.date||'—')+' · '+ev.rows.length+' 位 · '+esc(qtyText(bags))+(on?' · 目前編輯中':'')+'</span></button>'
+        + '<span style="text-align:right"><span class="num" style="font-size:16px">NT$'+fmt(due)+'</span>'
+        + '<br><span class="num" style="font-size:12px;color:var(--n600)">未收 '+fmt(due-paid)+'</span></span>'
+        + (S.puduEvents.length > 1 ? '<button class="x" data-delpudu="'+esc(ev.id)+'" aria-label="刪除這年">'+X+'</button>' : '')
+        + '</div></div>';
+    }).join('') + '</div>';
+  h += '<button class="btn btn-primary" data-act="newpudu">＋ 新增一年普渡</button>';
 
   h += '<div class="rule"></div>';
   h += '<div class="col">'
@@ -1165,8 +1191,8 @@ function viewInsure(t){
 function viewPuduSheet(){
   var T = puduTotals();
   var nrow = pud().rows.length;
-  var comp = nrow > 26 ? ' style="font-size:13px"' : '';
-  var body = '<div class="sheet"'+(nrow > 26 ? ' data-compact="1"' : '')+'>'
+  var fit = nrow > 30 ? Math.max(0.55, 30 / nrow) : 1;
+  var body = '<div class="sheet" data-fit style="--fit:'+fit.toFixed(3)+'"'+(nrow > 26 ? ' data-compact="1"' : '')+'>'
     + '<div class="hd"><h3 style="font-size:'+(nrow>26?'19px':'24px')+';line-height:1.3">'
     + esc(puduTitle())
     + '</h3><div class="dash"></div></div>'
@@ -1267,7 +1293,7 @@ function refreshPudu(){
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -1302,6 +1328,19 @@ document.addEventListener('click', function(e){
   if(el.dataset.ungo){
     var tg = trip(), ix = tg.going.indexOf(el.dataset.ungo);
     if(ix > -1) tg.going.splice(ix, 1);
+    save(); return render();
+  }
+
+  if(el.dataset.pudugo){ S.puduId = el.dataset.pudugo; S.tab = 'pudu'; S.screen = null; save(); return render(); }
+
+  if(el.dataset.delpudu){
+    if(S.puduEvents.length < 2) return;
+    var pe = null;
+    S.puduEvents.forEach(function(x){ if(String(x.id) === String(el.dataset.delpudu)) pe = x; });
+    if(!pe) return;
+    if(!confirm('要刪除「'+(pe.year||'')+'年 '+(pe.name||'普渡')+'」整筆名單嗎？無法復原。')) return;
+    S.puduEvents = S.puduEvents.filter(function(x){ return String(x.id) !== String(pe.id); });
+    if(String(S.puduId) === String(pe.id)) S.puduId = S.puduEvents[0].id;
     save(); return render();
   }
 
