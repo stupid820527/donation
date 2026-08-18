@@ -178,6 +178,7 @@ button{font:inherit}
   .app,.tabs{display:none !important}
   #print-area{display:block !important;padding:0}
   #print-area .sheet{border:none;background:#fff;padding:0;gap:16px}
+  [data-noprint]{display:none !important}
   #print-area .sheet[data-fit]{transform:scale(var(--fit,1));transform-origin:top left;width:calc(100% / var(--fit,1));gap:10px}
   #print-area .sheet[data-fit] .trow{padding:4px 0}
   #print-area .trow{break-inside:avoid;page-break-inside:avoid}
@@ -285,7 +286,7 @@ function seed(){
       note:'花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$',
       rows:PUDU_SEED.map(function(p){return {name:p.name,boxes:p.boxes,bags:p.bags,amount:p.amount,paid:p.paid};})
     }],
-    puduId:'p115', showCloudUrl:false, updatedAt:0
+    puduId:'p115', showCloudUrl:false, plainPerCol:13, plainPerPage:19, updatedAt:0
   };
 }
 
@@ -1241,43 +1242,55 @@ function viewPuduSheet(){
 
 function viewPuduPlain(){
   var rows = pud().rows, n = rows.length, T = puduTotals();
-  var twoCol = n > 20;
-  var half = Math.ceil(n / (twoCol ? 2 : 1));
-  var per = twoCol ? half : n;
-  var fs = per > 30 ? 22 : (per > 26 ? 24 : (per > 22 ? 27 : (per > 18 ? 30 : 34)));
   var e = pud();
+  var perCol = num(S.plainPerCol) || 13;
+  var perPage = num(S.plainPerPage) || 19;
+  var fs = perCol > 22 ? 22 : (perCol > 18 ? 26 : (perCol > 15 ? 29 : 32));
   var head = (e.name || '普渡') + ' 米名單';
   var sub = (e.year ? e.year + '年' : '') + (e.date || '');
 
-  function col(list, from){
+  function col(list){
+    if(!list.length) return '';
     return '<div style="flex:1;min-width:0">'
       + '<div class="thead" style="font-size:'+Math.round(fs*0.62)+'px">'
-      + '<div style="flex:1">姓名</div><div class="c-r" style="width:'+(fs*4.4)+'px">白米</div></div>'
-      + list.map(function(p,i){
-          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.28)+'px 0">'
-            + '<div style="flex:1;font-weight:500;letter-spacing:.02em;font-size:'
-            + (String(p.name||'').trim().length > 5 ? Math.round(fs*0.62) : fs) + 'px">'+esc(p.name||'—')+'</div>'
-            + '<div class="c-r" style="width:'+(fs*4.4)+'px;font-weight:500">'+esc(puduQty(p))+'</div></div>';
+      + '<div style="flex:1">姓名</div><div class="c-r" style="width:'+Math.round(fs*4.4)+'px">白米</div></div>'
+      + list.map(function(p){
+          var long = String(p.name||'').trim().length > 5;
+          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.26)+'px 0">'
+            + '<div style="flex:1;font-weight:500;letter-spacing:.02em;font-size:'+(long?Math.round(fs*0.62):fs)+'px">'+esc(p.name||'—')+'</div>'
+            + '<div class="c-r" style="width:'+Math.round(fs*4.4)+'px;font-weight:500">'+esc(puduQty(p))+'</div></div>';
         }).join('')
       + '</div>';
   }
 
-  var fitP = per > 24 ? Math.max(0.62, 24 / per) : 1;
-  var body = '<div class="sheet" data-fit style="--fit:'+fitP.toFixed(3)+'">'
-    + '<div class="hd"><h3 style="font-size:'+(twoCol?32:36)+'px;font-weight:600;line-height:1.25">'+esc(head)+'</h3>'
-    + (sub ? '<div class="sub" style="font-size:'+Math.round(fs*0.7)+'px;margin-top:3px">'+esc(sub)+'</div>' : '')
-    + '<div class="dash"></div></div>'
-    + '<div style="display:flex;gap:26px;align-items:flex-start">'
-    + col(rows.slice(0, half), 0)
-    + (twoCol && rows.length > half ? col(rows.slice(half), half) : '')
-    + '</div>'
-    + '<div class="dash"></div>'
-    + '<div class="trow" style="border-bottom:none;font-size:'+Math.round(fs*0.95)+'px">'
-    + '<div style="flex:1"></div>'
-    + '<div class="c-r" style="width:'+Math.round(fs*8)+'px;font-weight:500">白米 '+esc(qtyText(T.bagsTotal))+'</div></div>'
-    + '<div class="foot">製表 '+today()+'</div></div>';
+  var pages = [], i = 0;
+  while(i < n){ pages.push(rows.slice(i, i + perPage)); i += perPage; }
+  if(!pages.length) pages = [[]];
 
-  return '<div class="stack">' + backBtn() + body
+  var body = pages.map(function(pg, pi){
+    return '<div class="sheet"'+(pi ? ' style="page-break-before:always"' : '')+'>'
+      + '<div class="hd"><h3 style="font-size:'+(perCol>18?30:34)+'px;font-weight:600;line-height:1.25">'+esc(head)
+      + (pages.length > 1 ? '（'+(pi+1)+'／'+pages.length+'）' : '') + '</h3>'
+      + (sub ? '<div class="sub" style="font-size:'+Math.round(fs*0.62)+'px;margin-top:3px">'+esc(sub)+'</div>' : '')
+      + '<div class="dash"></div></div>'
+      + '<div style="display:flex;gap:26px;align-items:flex-start">'
+      + col(pg.slice(0, perCol)) + col(pg.slice(perCol))
+      + '</div>'
+      + (pi === pages.length - 1
+          ? '<div class="dash"></div><div class="trow" style="border-bottom:none;font-size:'+Math.round(fs*0.8)+'px">'
+            + '<div style="flex:1"></div><div class="c-r" style="width:'+Math.round(fs*8)+'px;font-weight:500">白米 '+esc(qtyText(T.bagsTotal))+'</div></div>'
+          : '')
+      + '<div class="foot">製表 '+today()+'</div></div>';
+  }).join('');
+
+  var ctl = '<div class="col" data-noprint><div class="fee-b" style="padding-left:0">'
+    + '<div class="fee-f"><div class="tag">每欄人數</div>'
+    + '<input class="input bare num" inputmode="numeric" data-s="plainPerCol" value="'+esc(perCol)+'"></div>'
+    + '<div class="fee-f"><div class="tag">每頁人數</div>'
+    + '<input class="input bare num" inputmode="numeric" data-s="plainPerPage" value="'+esc(perPage)+'"></div>'
+    + '</div><div class="muted">共 '+pages.length+' 頁 · 改數字即時重排</div></div>';
+
+  return '<div class="stack">' + backBtn() + ctl + body
     + '<button class="btn btn-primary" data-act="print">列印 ／ 儲存為 PDF</button></div>';
 }
 
@@ -1291,6 +1304,7 @@ function listOf(name){
 
 document.addEventListener('input', function(e){
   var el = e.target;
+  if(el.dataset.s){ S[el.dataset.s] = el.value; save(); return; }
   if(el.dataset.pe){
     pud()[el.dataset.pe] = el.value;
     save();
@@ -1577,6 +1591,7 @@ document.addEventListener('click', function(e){
 
 document.addEventListener('change', function(e){
   var el = e.target;
+  if(el.dataset && el.dataset.s){ S[el.dataset.s] = el.value; save(); return render(); }
   if(el.id === 'pudupick'){ S.puduId = el.value; save(); return render(); }
   if(el.dataset && el.dataset.list && el.dataset.k === 'name'
      && (el.dataset.list === 'fees' || el.dataset.list === 'sponsors' || el.dataset.list === 'pudu')){
