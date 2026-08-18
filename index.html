@@ -286,7 +286,7 @@ function seed(){
       note:'花蓮玉溪芋香米(一箱8包24公斤， 一包3公斤)一箱1680$',
       rows:PUDU_SEED.map(function(p){return {name:p.name,boxes:p.boxes,bags:p.bags,amount:p.amount,paid:p.paid};})
     }],
-    puduId:'p115', showCloudUrl:false, plainPerCol:13, plainPerPage:26, updatedAt:0
+    puduId:'p115', showCloudUrl:false, plainPerCol:12, plainPerPage:24, updatedAt:0
   };
 }
 
@@ -1245,7 +1245,7 @@ function viewPuduPlain(){
   var e = pud();
   var perCol = num(S.plainPerCol) || 13;
   var perPage = num(S.plainPerPage) || perCol * 2;
-  var fs = perCol > 22 ? 22 : (perCol > 18 ? 26 : (perCol > 15 ? 29 : 32));
+  var fs = perCol > 22 ? 20 : (perCol > 18 ? 23 : (perCol > 15 ? 26 : (perCol > 12 ? 28 : 31)));
   var head = (e.name || '普渡') + ' 米名單';
   var sub = (e.year ? e.year + '年' : '') + (e.date || '');
 
@@ -1256,7 +1256,7 @@ function viewPuduPlain(){
       + '<div style="flex:1">姓名</div><div class="c-r" style="width:'+Math.round(fs*4.4)+'px">白米</div></div>'
       + list.map(function(p){
           var long = String(p.name||'').trim().length > 5;
-          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.26)+'px 0">'
+          return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.2)+'px 0">'
             + '<div style="flex:1;font-weight:500;letter-spacing:.02em;font-size:'+(long?Math.round(fs*0.62):fs)+'px">'+esc(p.name||'—')+'</div>'
             + '<div class="c-r" style="width:'+Math.round(fs*4.4)+'px;font-weight:500">'+esc(puduQty(p))+'</div></div>';
         }).join('')
