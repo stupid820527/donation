@@ -1201,21 +1201,21 @@ function viewPuduSheet(){
     + '<div class="dash"></div></div>'
     + '<div class="thead" style="font-size:'+Math.round(fs*0.7)+'px">'
     + '<div style="width:'+w(1.6)+'">＃</div><div style="flex:1.6">姓名</div>'
-    + '<div class="c-r" style="width:'+w(4)+'">白米</div>'
-    + '<div class="c-r" style="width:'+w(5)+'">金額</div>'
+    + '<div style="width:'+w(4)+';text-align:center">白米</div>'
+    + '<div style="width:'+w(5)+';text-align:center">金額</div>'
     + '<div class="c-r" style="width:'+w(3)+'">已收</div></div>'
     + rows.map(function(p,i){
-        return '<div class="trow" style="font-size:'+fs+'px;padding:'+Math.round(fs*0.3)+'px 0">'
+        return '<div class="trow" style="font-size:'+fs+'px;padding:2px 0">'
           + '<div class="num" style="width:'+w(1.6)+';color:var(--n600);font-size:'+Math.round(fs*0.72)+'px">'+(i+1)+'</div>'
           + '<div style="flex:1.6;font-weight:500">'+esc(p.name||'—')+'</div>'
-          + '<div class="c-r" style="width:'+w(4)+'">'+esc(puduQty(p))+'</div>'
-          + '<div class="c-r" style="width:'+w(5)+'">'+fmt(puduAmount(p))+'$</div>'
+          + '<div style="width:'+w(4)+';text-align:center">'+esc(puduQty(p))+'</div>'
+          + '<div style="width:'+w(5)+';text-align:center;font-family:var(--num);font-variant-numeric:tabular-nums">'+fmt(puduAmount(p))+'$</div>'
           + '<div class="c-r" style="width:'+w(3)+';font-size:'+Math.round(fs*0.8)+'px'+(p.paid?'':';color:var(--danger)')+'">'+(p.paid?'付清':'—')+'</div></div>';
       }).join('')
     + '<div class="trow" style="border-bottom:none;font-size:'+fs+'px">'
     + '<div style="width:'+w(1.6)+'"></div><div style="flex:1.6;color:var(--n700)">合計 '+n+' 位</div>'
-    + '<div class="c-r" style="width:'+w(4)+';font-weight:500">'+qtyText(T.bagsTotal)+'</div>'
-    + '<div class="c-r" style="width:'+w(5)+';font-weight:500">'+fmt(T.due)+'$</div>'
+    + '<div style="width:'+w(4)+';text-align:center;font-weight:500">'+qtyText(T.bagsTotal)+'</div>'
+    + '<div style="width:'+w(5)+';text-align:center;font-weight:500;font-family:var(--num)">'+fmt(T.due)+'$</div>'
     + '<div class="c-r" style="width:'+w(3)+'"></div></div>'
     + '<div class="foot">製表 '+today()+' · 聖義堂班長 · 已收 '+fmt(T.paid)+'$ · 未收 '+fmt(T.unpaid)+'$</div></div>';
 
