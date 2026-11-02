@@ -75,7 +75,10 @@ button{font:inherit}
 .btn-row .btn{flex:1}
 
 .box{border:1px solid var(--divider);border-radius:4px;padding:11px 12px;display:flex;align-items:center;gap:10px}
-.box .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.box .grow,.fee .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.mv{display:flex;flex-direction:column;gap:2px;flex:none}
+.mv .x{width:34px;height:23px;min-height:0;font-size:12px}
+.mv .x:disabled{opacity:.3;cursor:default}
 .box .tag,.fee .tag{font-size:11px;letter-spacing:.1em;color:var(--n500)}
 .amt{width:128px;flex:none;display:flex;flex-direction:column;gap:3px}
 .amt .tag{text-align:right}
@@ -1070,10 +1073,10 @@ function puduTotals(){
     unpaid:due - paid, auto:auto, diff:due - auto};
 }
 function moveBtns(list, i, len){
-  return '<div style="display:flex;flex-direction:column;gap:2px;flex:none">'
-    + '<button class="x" style="min-height:26px;width:34px;font-size:13px"'+(i===0?' disabled':'')
+  return '<div class="mv">'
+    + '<button class="x"'+(i===0?' disabled':'')
     + ' data-move="up" data-mlist="'+list+'" data-i="'+i+'" aria-label="上移">▲</button>'
-    + '<button class="x" style="min-height:26px;width:34px;font-size:13px"'+(i===len-1?' disabled':'')
+    + '<button class="x"'+(i===len-1?' disabled':'')
     + ' data-move="down" data-mlist="'+list+'" data-i="'+i+'" aria-label="下移">▼</button></div>';
 }
 
