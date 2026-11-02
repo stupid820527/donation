@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="聖義堂記帳">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="app-version" content="12.0">
+<meta name="app-version" content="12.1">
 <meta name="description" content="聖義堂班長的記帳 App — 出遊記帳、保險名單、普渡登記">
 <title>聖義堂班長的記帳 App</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -763,7 +763,7 @@ function summaryHtml(t){
     + '</div>';
 }
 
-function xesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function xesc(s){ return String(s==null?'':s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g,'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
 /* ── 真正的 .xlsx 產生器（store-only zip） ───────────── */
 var CRCT = (function(){
@@ -800,6 +800,13 @@ function zipStore(files){
     u16(central.length), u16(central.length), u32(cdLen), u32(offset), u16(0)));
   return new Blob(parts.concat(cd, [endRec]), {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
+
+/* Excel 工作表名稱不能有 \ / ? * [ ] :，最長 31 字 */
+function sheetName(s, i){
+  var n = String(s||'').replace(/[\\\/?*\[\]:]/g,'-').replace(/^'+|'+$/g,'').trim().slice(0,31);
+  return n || ('工作表'+(i+1));
+}
+function fileName(s){ return String(s||'').replace(/[\\\/?*:"<>|]/g,'-'); }
 
 /* 樣式表：索引對應 XS.* */
 var XS = {def:0, title:1, head:2, name:3, idx:4, cell:5, item:6,
@@ -911,7 +918,7 @@ function xdownload(sheets, filename){
       + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
       + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
       + sheets.map(function(s,i){
-          return '<sheet name="'+xesc(String(s.name||('工作表'+(i+1))).slice(0,28))+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>';
+          return '<sheet name="'+xesc(sheetName(s.name, i))+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>';
         }).join('')
       + '</sheets></workbook>'},
     {name:'xl/_rels/workbook.xml.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -928,7 +935,7 @@ function xdownload(sheets, filename){
   var url = URL.createObjectURL(zipStore(files));
   var link = document.createElement('a');
   link.href = url;
-  link.download = filename;
+  link.download = fileName(filename);
   link.click();
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
