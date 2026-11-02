@@ -669,7 +669,9 @@ function viewTrip(t){
           + '<button class="x" data-del="sponsors" data-i="'+i+'" aria-label="刪除">'+X+'</button></div>';
       }).join('') : '<div class="muted">還沒有人贊助，按下面新增。</div>')
     + '</div>'
-    + '<button class="btn btn-primary" data-add="sponsors" style="margin-top:12px">＋ 新增贊助（姓名＋金額）</button></div>';
+    + '<div class="btn-row" style="margin-top:12px">'
+    + '<button class="btn btn-primary" data-act="fillsponsors">從名冊挑選贊助</button>'
+    + '<button class="btn btn-secondary" data-add="sponsors">＋ 手動新增</button></div></div>';
 
   h += summaryHtml(t);
 
@@ -800,7 +802,10 @@ function sheetXml(sh){
       }
       var t = (cell.n || !body) ? '' : ' t="inlineStr"';
       var out = '<c r="' + ref + '" s="' + sIdx + '"' + t + '>' + body + '</c>';
-      if(cell.across) ci += cell.across;
+      if(cell.across){
+        for(var k=1;k<=cell.across;k++) out += '<c r="' + colName(ci + k) + rn + '" s="' + sIdx + '"/>';
+        ci += cell.across;
+      }
       return out;
     }).join('');
     return '<row r="' + rn + '"' + (r.h ? ' ht="' + (r.h * 0.75).toFixed(1) + '" customHeight="1"' : '') + '>' + cells + '</row>';
@@ -813,13 +818,14 @@ function sheetXml(sh){
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
     + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
+    + '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>'
     + '<sheetFormatPr defaultRowHeight="18"/>'
     + (cols ? '<cols>' + cols + '</cols>' : '')
     + '<sheetData>' + rowsX + '</sheetData>'
     + (merges.length ? '<mergeCells count="' + merges.length + '">'
         + merges.map(function(m){ return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>' : '')
     + '<pageMargins left="0.25" right="0.25" top="0.3" bottom="0.3" header="0.2" footer="0.2"/>'
-    + '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="'+(sh.fitPage ? 1 : 0)+'"/>'
+    + '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/>'
     + '</worksheet>';
 }
 
@@ -924,12 +930,16 @@ function downloadExcel(){
 
   for(var i=0;i<n;i++){
     var fe = fees[i], rt = right[i], cells = [];
+    if(!fe && i < fees.length + 1){
+      cells.push({c:1, v:'', s:XS.idx}, {v:'', s:XS.name}, {v:'', s:XS.cell}, {v:'', s:XS.cell});
+    }
     if(fe){
       cells.push({c:1, v:i+1, n:true, s:XS.idx});
       cells.push({v:fe.name||'', s:XS.name});
       cells.push({v:fe.table||'', s:XS.cell});
       cells.push(String(fe.due||'').trim() ? {v:num(fe.due), n:true, s:XS.cell} : {v:'', s:XS.cell});
     }
+    if(rt && rt.kind === 'gap') cells.push({c:5, v:'', s:XS.cell}, {v:'', s:XS.cell});
     if(rt && rt.kind !== 'gap'){
       var st = rt.kind === 'head' ? XS.head : XS.item;
       cells.push({c:5, v:rt.name||'', s:st});
@@ -977,8 +987,9 @@ function openPicker(target){
   if(target === 'fees') t.fees.forEach(function(x){ already[String(x.name).trim()] = true; });
   if(target === 'going') t.going.forEach(function(n){ already[n] = true; });
   if(target === 'pudu') pud().rows.forEach(function(p){ already[String(p.name).trim()] = true; });
+  if(target === 'sponsors') t.sponsors.forEach(function(s){ already[String(s.name).trim()] = true; });
 
-  var title = target === 'fees' ? '選擇要收費的人' : (target === 'going' ? '選擇誰要去' : '選擇要登記普渡的人');
+  var title = target === 'fees' ? '選擇要收費的人' : (target === 'going' ? '選擇誰要去' : (target === 'sponsors' ? '選擇贊助的人' : '選擇要登記普渡的人'));
   var rows = S.roster.map(function(r){
     var on = !!already[r.name];
     return '<label class="pick-row'+(on?' dim':'')+'">'
@@ -1015,6 +1026,7 @@ function confirmPicker(){
     if(_pickTarget === 'fees') t.fees.push({name:n, table:'', due:t.feeDefault, paid:false});
     else if(_pickTarget === 'going'){ if(t.going.indexOf(n) < 0) t.going.push(n); }
     else if(_pickTarget === 'pudu') pud().rows.push({name:n, boxes:'', bags:'', amount:'', paid:false});
+    else if(_pickTarget === 'sponsors') t.sponsors.push({name:n, amount:''});
   });
   closePicker(); save(); render();
 }
@@ -1633,6 +1645,7 @@ document.addEventListener('click', function(e){
 
   if(a === 'fillfees'){ openPicker('fees'); return; }
   if(a === 'fillpudu'){ openPicker('pudu'); return; }
+  if(a === 'fillsponsors'){ openPicker('sponsors'); return; }
   if(a === 'pickclose'){ closePicker(); return; }
   if(a === 'pickall'){
     document.querySelectorAll('#picker input[type=checkbox]').forEach(function(c){ c.checked = true; });
