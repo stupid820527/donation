@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="聖義堂記帳">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="app-version" content="11.3">
+<meta name="app-version" content="12.0">
 <meta name="description" content="聖義堂班長的記帳 App — 出遊記帳、保險名單、普渡登記">
 <title>聖義堂班長的記帳 App</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -177,6 +177,9 @@ button{font:inherit}
 @media (min-width:720px){.modal{align-items:center}.modal-in{border-radius:4px;max-height:80vh}}
 .hidden{display:none !important}
 #print-area{display:none}
+#lock{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:22px}
+.lock-in{width:100%;max-width:360px;display:flex;flex-direction:column;gap:14px}
+body.locked .app,body.locked .tabs{display:none}
 @media print{
   body{background:#fff}
   .app,.tabs{display:none !important}
@@ -215,8 +218,9 @@ button{font:inherit}
 "use strict";
 var KEY = 'shengyi-ledger-v2';
 var URLKEY = 'shengyi-cloud-url';
+var PWKEY = 'shengyi-pw';
 var CLOUD_DEFAULT = 'https://script.google.com/macros/s/AKfycbwrZOVOoEqt3rNMi36oVM9qEU2B_YJMh2J6j1KOZ7wLhutiqqRZk-7cYiteStG9Wdvh/exec';
-var CLOUD = { url: (localStorage.getItem(URLKEY) || CLOUD_DEFAULT), busy:false, msg:'', pending:false, timer:null };
+var CLOUD = { url: (localStorage.getItem(URLKEY) || CLOUD_DEFAULT), busy:false, msg:'', pending:false, timer:null, ready:false, pw:(localStorage.getItem(PWKEY) || '') };
 
 var ICON = {
   trip:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
@@ -232,45 +236,46 @@ var DEFAULT_COSTS = [
   {name:'紅包',amount:600},{name:'午餐',amount:2000},{name:'車資',amount:9000},{name:'保險',amount:1600}
 ];
 
+/* 名冊只放姓名；生日與身分證存在試算表和各裝置裡，不寫進公開的程式碼 */
 var ROSTER = [
-  {name:'黃林玉葉',birth:'42.12.04',id:'P201876414'},
-  {name:'黃益雄',birth:'65.12.11',id:'N123123553'},
-  {name:'吳雅如',birth:'70.12.16',id:'N223859747'},
-  {name:'鍾文龍',birth:'57.08.20',id:'N120471392'},
-  {name:'黃美玲',birth:'59.05.02',id:'N220987511'},
-  {name:'鍾雅涵',birth:'82.05.27',id:'N225184609'},
-  {name:'邱顯富',birth:'83.03.25',id:'Q123089236'},
-  {name:'邱煜翔',birth:'109.01.02',id:'N128155582'},
-  {name:'邱妍忻',birth:'111.03.29',id:'N227903273'},
-  {name:'黃秀春',birth:'53.07.02',id:'N221948787'},
-  {name:'巫月桂',birth:'40.09.20',id:'N201215787'},
-  {name:'張淑慧',birth:'66.04.28',id:'N225916647'},
-  {name:'許翠娥',birth:'52.06.21',id:'N224988603'},
-  {name:'陳盈利',birth:'56.03.07',id:'N221240455'},
-  {name:'巫梅姿',birth:'48.10.15',id:'N221808019'},
-  {name:'黃葦庭',birth:'92.03.18',id:'N226240160'},
-  {name:'蘇威領',birth:'56.11.09',id:'N121469289'},
-  {name:'黃雅玲',birth:'57.06.04',id:'N220407090'},
-  {name:'徐金鑾',birth:'54.03.20',id:'N220945577'},
-  {name:'龔秋菊',birth:'50.10.21',id:'Q220500785'},
-  {name:'許明鄰',birth:'59.05.26',id:'N121754596'},
-  {name:'黃麗孜',birth:'63.09.13',id:'N223006657'},
-  {name:'許絨騏',birth:'88.02.10',id:'P223955370'},
-  {name:'陳育銓',birth:'65.09.09',id:'N123190858'},
-  {name:'楊英雯',birth:'65.08.30',id:'N222832591'},
-  {name:'楊麗卿',birth:'46.10.15',id:'N220990269'},
-  {name:'廖瑛席',birth:'78.07.30',id:'N125254828'},
-  {name:'廖裴萱',birth:'81.10.09',id:'N225256842'},
-  {name:'黃玉林',birth:'54.09.01',id:'N220950309'},
-  {name:'羅文澤',birth:'57.09.22',id:'Q124567695'},
-  {name:'許素卿',birth:'56.11.18',id:'N221721731'},
-  {name:'羅阡毓',birth:'89.08.06',id:'P224540588'},
-  {name:'陳美華',birth:'64.07.29',id:'N222956078'},
-  {name:'陳俊雄',birth:'65.12.21',id:'N122962485'},
-  {name:'林信女',birth:'46.03.07',id:'M220022836'},
-  {name:'黃秀絨',birth:'45.01.20',id:'N221948769'},
-  {name:'陳重翰',birth:'54.03.10',id:'N121210651'},
-  {name:'林世勳',birth:'80.03.19',id:'N125327764'},
+  {name:'黃林玉葉',birth:'',id:''},
+  {name:'黃益雄',birth:'',id:''},
+  {name:'吳雅如',birth:'',id:''},
+  {name:'鍾文龍',birth:'',id:''},
+  {name:'黃美玲',birth:'',id:''},
+  {name:'鍾雅涵',birth:'',id:''},
+  {name:'邱顯富',birth:'',id:''},
+  {name:'邱煜翔',birth:'',id:''},
+  {name:'邱妍忻',birth:'',id:''},
+  {name:'黃秀春',birth:'',id:''},
+  {name:'巫月桂',birth:'',id:''},
+  {name:'張淑慧',birth:'',id:''},
+  {name:'許翠娥',birth:'',id:''},
+  {name:'陳盈利',birth:'',id:''},
+  {name:'巫梅姿',birth:'',id:''},
+  {name:'黃葦庭',birth:'',id:''},
+  {name:'蘇威領',birth:'',id:''},
+  {name:'黃雅玲',birth:'',id:''},
+  {name:'徐金鑾',birth:'',id:''},
+  {name:'龔秋菊',birth:'',id:''},
+  {name:'許明鄰',birth:'',id:''},
+  {name:'黃麗孜',birth:'',id:''},
+  {name:'許絨騏',birth:'',id:''},
+  {name:'陳育銓',birth:'',id:''},
+  {name:'楊英雯',birth:'',id:''},
+  {name:'楊麗卿',birth:'',id:''},
+  {name:'廖瑛席',birth:'',id:''},
+  {name:'廖裴萱',birth:'',id:''},
+  {name:'黃玉林',birth:'',id:''},
+  {name:'羅文澤',birth:'',id:''},
+  {name:'許素卿',birth:'',id:''},
+  {name:'羅阡毓',birth:'',id:''},
+  {name:'陳美華',birth:'',id:''},
+  {name:'陳俊雄',birth:'',id:''},
+  {name:'林信女',birth:'',id:''},
+  {name:'黃秀絨',birth:'',id:''},
+  {name:'陳重翰',birth:'',id:''},
+  {name:'林世勳',birth:'',id:''},
   {name:'劉芷瑄',birth:'',id:''},
   {name:'陳聖廷',birth:'',id:''},
   {name:'葉品均',birth:'',id:''},
@@ -402,19 +407,22 @@ function queuePush(){
 
 function pushCloud(cb){
   if(!CLOUD.url){ if(cb) cb(false,'尚未設定網址'); return; }
+  if(!CLOUD.ready){ CLOUD.pending = true; if(cb) cb(false,'等待取回雲端資料'); return; }
   if(CLOUD.busy){ CLOUD.pending = true; if(cb) cb(false,'同步中'); return; }
   CLOUD.busy = true;
   var stamp = S.updatedAt || Date.now();
   fetch(CLOUD.url, {
     method:'POST', redirect:'follow',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({data:snapshot(), updatedAt:stamp})
+    body: JSON.stringify({pw:CLOUD.pw, data:snapshot(), updatedAt:stamp})
   }).then(function(r){ return r.json(); }).then(function(j){
     CLOUD.busy = false;
     if(j && j.ok){
       localStorage.setItem('shengyi-cloud-at', String(stamp));
       CLOUD.msg = '已同步到試算表 ' + clock();
       setSaved('已同步 ' + clock());
+    }else if(j && j.error === 'badpw'){
+      badPassword();
     }else{
       CLOUD.msg = '同步失敗：' + ((j && j.error) || '試算表回應異常');
       setSaved('同步失敗，資料仍在本機');
@@ -433,10 +441,13 @@ function pushCloud(cb){
 
 function pullCloud(cb){
   if(!CLOUD.url){ if(cb) cb(false,'尚未設定網址'); return; }
+  if(!CLOUD.pw){ if(cb) cb(false,'尚未輸入密碼'); return; }
   CLOUD.msg = '讀取中…';
   updateCloudBox();
-  fetch(CLOUD.url + (CLOUD.url.indexOf('?')>-1?'&':'?') + 't=' + Date.now(), {redirect:'follow'})
+  fetch(CLOUD.url + (CLOUD.url.indexOf('?')>-1?'&':'?') + 't=' + Date.now() + '&pw=' + encodeURIComponent(CLOUD.pw), {redirect:'follow'})
     .then(function(r){ return r.json(); }).then(function(j){
+      if(j && j.error === 'badpw'){ badPassword(); if(cb) cb(false,'badpw'); return; }
+      if(j && j.ok) CLOUD.ready = true;
       if(!j || !j.ok){ CLOUD.msg = '讀取失敗：' + ((j && j.error) || '試算表回應異常'); updateCloudBox(); if(cb) cb(false); return; }
       if(!j.data){ CLOUD.msg = '試算表還是空的，會把這台的資料上傳'; updateCloudBox(); pushCloud(); if(cb) cb(true); return; }
       var mine = S.updatedAt || 0, theirs = Number(j.updatedAt) || 0;
@@ -451,6 +462,7 @@ function pullCloud(cb){
       }else{
         CLOUD.msg = '已是最新 ' + clock();
       }
+      if(CLOUD.pending && theirs <= mine){ CLOUD.pending = false; queuePush(); }
       updateCloudBox();
       if(cb) cb(true);
     }).catch(function(){
@@ -493,6 +505,55 @@ function updateCloudBox(){
   if(el) el.textContent = CLOUD.msg;
   var dot = document.getElementById('clouddot');
   if(dot) dot.textContent = CLOUD.url ? '已連結共用試算表 · 自動同步' : '未連結';
+}
+
+/* ── 密碼鎖 ── */
+function badPassword(){
+  CLOUD.pw = '';
+  try{ localStorage.removeItem(PWKEY); }catch(e){}
+  showLock('密碼錯誤，請重新輸入');
+}
+function showLock(msg){
+  var el = document.getElementById('lock');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'lock';
+    el.innerHTML = '<div class="lock-in">'
+      + '<div class="kicker">聖義堂 · 班長記帳</div>'
+      + '<h2 style="font-size:28px">請輸入密碼</h2>'
+      + '<input class="input" id="lockpw" type="password" autocomplete="current-password" placeholder="密碼">'
+      + '<button class="btn btn-primary" data-act="unlock">進入</button>'
+      + '<div class="muted" id="lockmsg"></div></div>';
+    document.body.appendChild(el);
+  }
+  document.body.classList.add('locked');
+  var m = document.getElementById('lockmsg');
+  if(m){ m.textContent = msg || ''; m.style.color = msg ? 'var(--danger)' : ''; }
+  var i = document.getElementById('lockpw');
+  if(i){ i.value = ''; setTimeout(function(){ i.focus(); }, 50); }
+}
+function hideLock(){
+  var el = document.getElementById('lock');
+  if(el) el.remove();
+  document.body.classList.remove('locked');
+}
+function tryUnlock(){
+  var i = document.getElementById('lockpw');
+  var v = (i && i.value || '').trim();
+  if(!v) return;
+  var m = document.getElementById('lockmsg');
+  if(m){ m.textContent = '確認中…'; m.style.color = ''; }
+  CLOUD.pw = v;
+  pullCloud(function(ok, why){
+    if(ok){
+      try{ localStorage.setItem(PWKEY, v); }catch(e){}
+      hideLock(); render();
+    }else if(why !== 'badpw'){
+      CLOUD.pw = '';
+      var m2 = document.getElementById('lockmsg');
+      if(m2){ m2.textContent = '連不上試算表，請確認網路後再試'; m2.style.color = 'var(--danger)'; }
+    }
+  });
 }
 
 function trip(){
@@ -1264,6 +1325,10 @@ function viewPast(){
     + '<input type="file" accept="application/json,.json" id="importer" style="display:none"></label>'
     + '<div class="muted" id="importmsg"></div>'
     + '</div>';
+  h += '<div class="rule"></div>';
+  h += '<div class="col"><div class="sec-t">登出</div>'
+    + '<div class="muted">借用別人的手機或電腦時，用完記得登出，會清除這台裝置上的資料。</div>'
+    + '<button class="btn btn-ghost" style="border:1px solid var(--divider);color:var(--danger)" data-act="logout">登出這台裝置</button></div>';
   return h + '</div>';
 }
 
@@ -1639,6 +1704,18 @@ document.addEventListener('click', function(e){
   if(el.dataset.del){ listOf(el.dataset.del).splice(+el.dataset.i,1); save(); return render(); }
 
   var a = el.dataset.act;
+  if(a === 'unlock'){ tryUnlock(); return; }
+  if(a === 'logout'){
+    var synced = Number(localStorage.getItem('shengyi-cloud-at')) || 0;
+    var warn = (S.updatedAt > synced) ? '\n\n注意：這台還有資料沒同步到試算表，登出後會遺失。' : '';
+    if(!confirm('登出後會清除這台裝置上的資料，下次輸入密碼會從試算表重新取回。確定登出？' + warn)) return;
+    try{
+      localStorage.removeItem(PWKEY); localStorage.removeItem(KEY);
+      localStorage.removeItem('shengyi-cloud-at'); localStorage.removeItem('shengyi-current');
+    }catch(e2){}
+    location.reload();
+    return;
+  }
   if(a === 'back'){ S.screen = null; return render(); }
   if(a === 'sheet'){ S.screen = 'sheet'; return render(); }
   if(a === 'insure'){ S.screen = 'insure'; return render(); }
@@ -1761,6 +1838,10 @@ document.addEventListener('click', function(e){
   }
 });
 
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && e.target && e.target.id === 'lockpw') tryUnlock();
+});
+
 document.addEventListener('change', function(e){
   var el = e.target;
   if(el.dataset && el.dataset.s){ S[el.dataset.s] = el.value; save(); return render(); }
@@ -1796,6 +1877,7 @@ document.addEventListener('change', function(e){
 });
 
 render();
+if(!CLOUD.pw) showLock();
 
 if(CLOUD.url){
   setTimeout(pullCloud, 60);
