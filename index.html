@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="聖義堂記帳">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="app-version" content="11.3">
 <meta name="description" content="聖義堂班長的記帳 App — 出遊記帳、保險名單、普渡登記">
 <title>聖義堂班長的記帳 App</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -321,7 +322,8 @@ function load(){
           if(!t.costs) t.costs = [];
         });
         base.trips = d.trips;
-        base.currentId = d.currentId || d.trips[0].id;
+        var lc = localStorage.getItem('shengyi-current');
+        base.currentId = (lc && d.trips.some(function(x){ return String(x.id) === lc; })) ? lc : (d.currentId || d.trips[0].id);
       }
       if(d && d.roster && d.roster.length) base.roster = d.roster;
       // 補齊：舊資料裡沒有的人一律帶入，姓名相同者不重複
@@ -464,7 +466,9 @@ function adopt(d){
       if(!t.costs) t.costs = [];
     });
     S.trips = d.trips;
-    S.currentId = d.currentId || d.trips[0].id;
+    var keepId = localStorage.getItem('shengyi-current') || S.currentId;
+    var hit = d.trips.some(function(x){ return String(x.id) === String(keepId); });
+    S.currentId = hit ? keepId : d.trips[0].id;
   }
   if(d.roster) S.roster = d.roster;
   if(d.puduEvents && d.puduEvents.length){
@@ -487,7 +491,7 @@ function updateCloudBox(){
 }
 
 function trip(){
-  for(var i=0;i<S.trips.length;i++) if(S.trips[i].id===S.currentId) return S.trips[i];
+  for(var i=0;i<S.trips.length;i++) if(String(S.trips[i].id)===String(S.currentId)) return S.trips[i];
   return S.trips[0];
 }
 function num(v){ var n = parseInt(String(v).replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; }
@@ -1130,7 +1134,7 @@ function viewPast(){
     + '<div class="muted">點一場就切換過去，資料各自獨立</div><div class="rule"></div></div>';
   h += '<div class="col">' + S.trips.map(function(t){
       var inc = income(t), bal = inc - costTotal(t);
-      var on = (t.id === S.currentId);
+      var on = (String(t.id) === String(S.currentId));
       return '<div class="fee'+(on?' paid':'')+'">'
         + '<div class="fee-a">'
         + '<button class="pick-open" data-trip="'+t.id+'" style="flex:1;min-width:0;text-align:left;background:transparent;border:none;cursor:pointer;padding:0">'
@@ -1442,7 +1446,12 @@ document.addEventListener('click', function(e){
     save(); return render();
   }
 
-  if(el.dataset.trip){ S.currentId = el.dataset.trip; S.tab = 'trip'; S.screen = null; save(); return render(); }
+  if(el.dataset.trip){
+    var tid = el.dataset.trip;
+    S.trips.forEach(function(x){ if(String(x.id) === tid) tid = x.id; });
+    S.currentId = tid; localStorage.setItem('shengyi-current', String(tid));
+    S.tab = 'trip'; S.screen = null; save(); return render();
+  }
 
   if(el.dataset.add){
     var nm = el.dataset.add;
