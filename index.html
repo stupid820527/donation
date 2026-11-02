@@ -320,6 +320,7 @@ function load(){
           if(!t.sponsors) t.sponsors = [];
           if(!t.going) t.going = [];
           if(!t.costs) t.costs = [];
+          if(!t.days) t.days = [];
         });
         base.trips = d.trips;
         var lc = localStorage.getItem('shengyi-current');
@@ -464,6 +465,7 @@ function adopt(d){
       if(!t.sponsors) t.sponsors = [];
       if(!t.going) t.going = [];
       if(!t.costs) t.costs = [];
+      if(!t.days) t.days = [];
     });
     S.trips = d.trips;
     var keepId = localStorage.getItem('shengyi-current') || S.currentId;
@@ -571,6 +573,35 @@ function viewTrip(t){
     + '<div class="field"><label>日期</label>'
     + '<input class="input num" data-f="date" value="'+esc(t.date)+'"></div>'
     + '</div>';
+
+  if(!t.days) t.days = [];
+  h += '<div><div class="sec"><div class="sec-t">參拜行程</div><div class="rule"></div>'
+    + '<div class="sec-n">'+t.days.length+' 天 · '+t.days.reduce(function(a,d){return a+d.temples.length;},0)+' 間</div></div>'
+    + '<datalist id="templelist">'+templeHistory().map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('')+'</datalist>'
+    + '<div class="col">'
+    + (t.days.length ? t.days.map(function(d,di){
+        return '<div class="fee">'
+          + '<div class="fee-a"><div class="grow">'
+          + '<input class="input bare" style="font-family:var(--display);font-size:20px;font-weight:500" data-day="'+di+'" data-dk="label" value="'+esc(d.label)+'"></div>'
+          + moveBtns('days', di, t.days.length)
+          + '<button class="x" data-delday="'+di+'" aria-label="刪除這天">'+X+'</button></div>'
+          + d.temples.map(function(tp,ti){
+              return '<div class="fee-a" style="padding-left:6px;border-top:1px solid var(--hair);padding-top:8px">'
+                + '<div class="no">'+(ti+1)+'</div>'
+                + '<div class="grow">'
+                + '<input class="input bare" list="templelist" style="font-size:17px;font-weight:500" placeholder="廟宇名稱" data-day="'+di+'" data-ti="'+ti+'" data-tk="name" value="'+esc(tp.name)+'">'
+                + '<input class="input bare" style="font-size:13.5px;color:var(--n700);min-height:30px" placeholder="供品／備註（例：花1 菓1、燈2 蓮花2）" data-day="'+di+'" data-ti="'+ti+'" data-tk="note" value="'+esc(tp.note)+'">'
+                + '</div>'
+                + moveBtns('temples:'+di, ti, d.temples.length)
+                + '<button class="x" data-deltemple="'+di+':'+ti+'" aria-label="刪除">'+X+'</button></div>';
+            }).join('')
+          + '<button class="btn btn-ghost btn-inline" data-addtemple="'+di+'" style="padding-left:6px">＋ 新增廟宇</button>'
+          + '<div class="fee-f" style="padding-left:6px"><div class="tag">住宿（可留空）</div>'
+          + '<input class="input bare" placeholder="例：枋客文旅" data-day="'+di+'" data-dk="stay" value="'+esc(d.stay)+'"></div>'
+          + '</div>';
+      }).join('') : '<div class="muted">還沒有行程。按下面新增第一天，輸入廟宇時會自動跳出以前去過的廟。</div>')
+    + '</div>'
+    + '<button class="btn btn-ghost btn-inline" data-act="addday" style="margin-top:10px">＋ 新增一天</button></div>';
 
   h += '<div><div class="sec"><div class="sec-t">費用項目</div><div class="rule"></div><div class="sec-n">'+t.costs.length+' 項</div></div>'
     + '<div class="col">'
@@ -909,6 +940,20 @@ function downloadExcel(){
     rows.push({h:39, cells:cells});
   }
 
+  (t.days||[]).forEach(function(d){
+    if(!d.temples.length && !d.stay) return;
+    rows.push({h:20, cells:[]});
+    rows.push({h:39, cells:[{c:2, v:(d.label||'')+'參拜地點', s:XS.item, across:2}]});
+    d.temples.forEach(function(tp,ti){
+      if(!String(tp.name||'').trim()) return;
+      rows.push({h:36, cells:[
+        {c:1, v:ti+1, n:true, s:XS.idx},
+        {v:tp.name, s:XS.item, across:2},
+        {c:5, v:tp.note||'', s:XS.cell, across:1}]});
+    });
+    if(String(d.stay||'').trim()) rows.push({h:39, cells:[{c:2, v:(d.label||'')+'住宿：'+d.stay, s:XS.item, across:2}]});
+  });
+
   var sheet1 = {name:(t.place||'出遊').slice(0,24), cols:[58,196,71,112,282,202], rows:rows};
 
   var g = goingPeople(t);
@@ -1018,6 +1063,16 @@ function moveBtns(list, i, len){
     + ' data-move="up" data-mlist="'+list+'" data-i="'+i+'" aria-label="上移">▲</button>'
     + '<button class="x" style="min-height:26px;width:34px;font-size:13px"'+(i===len-1?' disabled':'')
     + ' data-move="down" data-mlist="'+list+'" data-i="'+i+'" aria-label="下移">▼</button></div>';
+}
+
+var DAYNAMES = ['第一天','第二天','第三天','第四天','第五天','第六天','第七天'];
+function templeHistory(){
+  var seen = {}, out = [];
+  S.trips.forEach(function(t){ (t.days||[]).forEach(function(d){ d.temples.forEach(function(tp){
+    var n = String(tp.name||'').trim();
+    if(n && !seen[n]){ seen[n] = 1; out.push(n); }
+  }); }); });
+  return out;
 }
 
 function puduTitle(){
@@ -1358,6 +1413,8 @@ function viewPuduPlain(){
 /* ── events ───────────────────────────────────────────── */
 
 function listOf(name){
+  if(name === 'days') return trip().days;
+  if(String(name).indexOf('temples:') === 0) return trip().days[+name.split(':')[1]].temples;
   if(name === 'roster') return S.roster;
   if(name === 'pudu') return pud().rows;
   return trip()[name];
@@ -1366,6 +1423,13 @@ function listOf(name){
 document.addEventListener('input', function(e){
   var el = e.target;
   if(el.dataset.s){ S[el.dataset.s] = el.value; save(); return; }
+  if(el.dataset.day !== undefined){
+    var dd = trip().days[+el.dataset.day];
+    if(!dd) return;
+    if(el.dataset.tk) dd.temples[+el.dataset.ti][el.dataset.tk] = el.value;
+    else dd[el.dataset.dk] = el.value;
+    save(); return;
+  }
   if(el.dataset.pe){
     pud()[el.dataset.pe] = el.value;
     save();
@@ -1435,7 +1499,7 @@ function refreshPudu(){
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu],[data-move]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu],[data-move],[data-addtemple],[data-deltemple],[data-delday]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -1475,6 +1539,25 @@ document.addEventListener('click', function(e){
   if(el.dataset.ungo){
     var tg = trip(), ix = tg.going.indexOf(el.dataset.ungo);
     if(ix > -1) tg.going.splice(ix, 1);
+    save(); return render();
+  }
+
+  if(el.dataset.addtemple !== undefined){
+    trip().days[+el.dataset.addtemple].temples.push({name:'', note:''});
+    save(); render();
+    var ins = document.querySelectorAll('[data-day="'+el.dataset.addtemple+'"][data-tk="name"]');
+    if(ins.length) ins[ins.length-1].focus({preventScroll:true});
+    return;
+  }
+  if(el.dataset.deltemple){
+    var pp = el.dataset.deltemple.split(':');
+    trip().days[+pp[0]].temples.splice(+pp[1], 1);
+    save(); return render();
+  }
+  if(el.dataset.delday !== undefined){
+    var dy = trip().days[+el.dataset.delday];
+    if(dy.temples.length && !confirm('要刪除「'+dy.label+'」整天的行程嗎？')) return;
+    trip().days.splice(+el.dataset.delday, 1);
     save(); return render();
   }
 
@@ -1593,6 +1676,11 @@ document.addEventListener('click', function(e){
   if(a === 'cloudreset'){
     CLOUD.url = CLOUD_DEFAULT; localStorage.removeItem(URLKEY);
     S.showCloudUrl = false; CLOUD.msg = '已恢復預設網址'; render(); pullCloud(); return;
+  }
+  if(a === 'addday'){
+    var tt = trip(); if(!tt.days) tt.days = [];
+    tt.days.push({label:DAYNAMES[tt.days.length] || ('第'+(tt.days.length+1)+'天'), temples:[{name:'',note:''}], stay:''});
+    save(); return render();
   }
   if(a === 'excel'){ downloadExcel(); return; }
   if(a === 'puduexcel'){ downloadPuduExcel(); return; }
