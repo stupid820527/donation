@@ -9,16 +9,16 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="聖義堂記帳">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="app-version" content="12.1">
+<meta name="app-version" content="12.2">
 <meta name="description" content="聖義堂班長的記帳 App — 出遊記帳、保險名單、普渡登記">
 <title>聖義堂班長的記帳 App</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Lora:wght@400;500&family=Noto+Serif+TC:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Lora:wght@500;600;700&family=Noto+Serif+TC:wght@500;600;700;900&display=swap">
 <style>
 :root{
   --bg:#f3f2f2; --surface:#eae9e9; --paper:#fbfaf9; --text:#201f1d;
-  --n600:#7d7979; --n500:#9b9797; --n400:#bab6b6; --n300:#d7d3d3; --n700:#605d5d; --n800:#444141;
+  --n600:#5f5b5b; --n500:#7a7676; --n400:#a8a4a4; --n300:#d7d3d3; --n700:#474444; --n800:#2e2c2b;
   --accent:#b68235; --accent-400:#e1ad66; --accent-700:#7d5411; --danger:#8a3d2c;
   --divider:rgba(32,31,29,.16); --hair:rgba(32,31,29,.1);
   --serif:"Noto Serif TC","Lora",serif; --display:"Cormorant Garamond","Noto Serif TC",serif; --num:"Lora",serif;
@@ -36,6 +36,18 @@ button{font:inherit}
 :focus{outline:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 ::selection{background:rgba(182,130,53,.3)}
+/* 字體加粗、加深，手機上比較好讀 */
+body{font-weight:600}
+input,button,.input{font-weight:600}
+.muted,.mt,.tag,.sub,.foot,.kicker,.no,.c-no{font-weight:600}
+h2,h3,.sec-t,.big,.sheet .hd h3,.modal-hd h3{font-weight:700 !important}
+.nm,.pick-nm,.c-nm,.li .nm,.pick .nm,.sr.sum span:last-child{font-weight:700}
+input[style*="font-weight:500"],span[style*="font-weight:500"],div[style*="font-weight:500"]{font-weight:700 !important}
+::placeholder{font-weight:500}
+.drive-t{flex:none;min-height:40px;padding:0 10px;border:1px solid var(--divider);border-radius:4px;background:transparent;cursor:pointer;font-size:14px;color:var(--n700)}
+.drive-t.on{background:var(--accent-700);border-color:var(--accent-700);color:#fff}
+.drive-h{display:flex;align-items:center;gap:10px;margin:18px 0 8px;font-size:15px;color:var(--accent-700);font-weight:700}
+.drive-h:after{content:'';flex:1;height:1px;background:var(--divider)}
 
 .status{position:sticky;top:0;z-index:20;background:var(--bg);display:flex;align-items:center;gap:7px;
   padding:12px 0 10px;font-size:12.5px;color:var(--n600);border-bottom:1px solid var(--hair)}
@@ -686,7 +698,7 @@ function viewTrip(t){
     return !r || !r.birth || !r.id;
   }).length;
   h += '<div><div class="sec"><div class="sec-t">誰要去 · 收費</div><div class="rule"></div>'
-    + '<div class="sec-n" data-fees-n>'+t.fees.length+' 位 · 未繳 '+t.fees.filter(function(x){return !x.paid;}).length+'</div></div>'
+    + '<div class="sec-n" data-fees-n>'+t.fees.length+' 位'+(t.fees.some(function(x){return x.self;})?'（自行開車 '+t.fees.filter(function(x){return x.self;}).length+'）':'')+' · 未繳 '+t.fees.filter(function(x){return !x.paid;}).length+'</div></div>'
     + (lackN ? '<div class="muted" style="color:var(--danger);margin-bottom:8px">'+lackN+' 位缺生日或身分證，投保名單會漏掉 — 到名冊補齊</div>' : '')
     + '<div class="box" style="margin-bottom:10px">'
     + '<div class="grow"><div class="tag">每人費用（預設）</div>'
@@ -694,28 +706,14 @@ function viewTrip(t){
     + '<button class="btn btn-ghost" style="width:auto;min-height:44px;font-size:14px;border:1px solid var(--divider)" data-act="fillfees">從名冊挑選</button>'
     + '</div>'
     + '<div class="col">'
-    + (t.fees.length ? t.fees.map(function(x,i){
-        var r = rosterOf(x.name);
-        var lack = !r || !r.birth || !r.id;
-        return '<div class="fee'+(x.paid?' paid':'')+'">'
-          + '<div class="fee-a">'
-          + '<div class="no">'+(i+1)+'</div>'
-          + '<div class="grow"><div class="tag">姓名</div>'
-          + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="fees" data-i="'+i+'" data-k="name" value="'+esc(x.name)+'"></div>'
-          + '<button class="paid-t" data-paid="'+i+'" aria-label="切換已繳">'+(x.paid?'已繳':'未繳')+'</button>'
-          + moveBtns('fees', i, t.fees.length)
-          + '<button class="x" data-del="fees" data-i="'+i+'" aria-label="刪除">'+X+'</button>'
-          + '</div>'
-          + '<div class="fee-b">'
-          + '<div class="fee-f"><div class="tag">桌號</div>'
-          + '<input class="input bare num" placeholder="—" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="table" value="'+esc(x.table)+'"></div>'
-          + '<div class="fee-f wide"><div class="tag">應繳</div><div class="amt-in"><span>NT$</span>'
-          + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="due" value="'+esc(x.due)+'"></div></div>'
-          + '</div>'
-          + '<div class="mt" style="padding-left:32px'+(lack?';color:var(--danger)':'')+'">'
-          + esc((r && r.birth) || '缺生日') + ' · ' + esc((r && r.id) || '缺身分證') + '</div>'
-          + '</div>';
-      }).join('') : '<div class="muted">還沒有人。按「從名冊挑選」勾選這次要去的人，費用會自動帶入。</div>')
+    + (t.fees.length ? (function(){
+        var bus = [], self = [];
+        t.fees.forEach(function(x,i){ (x.self ? self : bus).push(i); });
+        var out = bus.map(function(i,k){ return feeRow(t, i, k+1); }).join('');
+        if(self.length) out += '<div class="drive-h">自行開車 · '+self.length+' 位</div>'
+          + self.map(function(i,k){ return feeRow(t, i, k+1); }).join('');
+        return out;
+      })() : '<div class="muted">還沒有人。按「從名冊挑選」勾選這次要去的人，費用會自動帶入。</div>')
     + '</div>'
     + '<div class="btn-row" style="margin-top:10px">'
     + '<button class="btn btn-ghost" style="border:1px solid var(--divider)" data-add="fees">＋ 單筆新增</button>'
@@ -745,6 +743,31 @@ function viewTrip(t){
     + '</div>';
 
   return h + '</div>';
+}
+
+function feeRow(t, i, no){
+  var x = t.fees[i];
+  var r = rosterOf(x.name);
+        var lack = !r || !r.birth || !r.id;
+        return '<div class="fee'+(x.paid?' paid':'')+'">'
+          + '<div class="fee-a">'
+          + '<div class="no">'+no+'</div>'
+          + '<div class="grow"><div class="tag">姓名</div>'
+          + '<input class="input bare" style="font-size:18px;font-weight:500" placeholder="姓名" data-list="fees" data-i="'+i+'" data-k="name" value="'+esc(x.name)+'"></div>'
+          + '<button class="paid-t" data-paid="'+i+'" aria-label="切換已繳">'+(x.paid?'已繳':'未繳')+'</button>'
+          + moveBtns('fees', i, t.fees.length)
+          + '<button class="x" data-del="fees" data-i="'+i+'" aria-label="刪除">'+X+'</button>'
+          + '</div>'
+          + '<div class="fee-b">'
+          + '<div class="fee-f"><div class="tag">桌號</div>'
+          + '<input class="input bare num" placeholder="—" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="table" value="'+esc(x.table)+'"></div>'
+          + '<div class="fee-f wide"><div class="tag">應繳</div><div class="amt-in"><span>NT$</span>'
+          + '<input class="input bare" placeholder="0" inputmode="numeric" data-list="fees" data-i="'+i+'" data-k="due" value="'+esc(x.due)+'"></div></div>'
+          + '<button class="drive-t'+(x.self?' on':'')+'" data-self="'+i+'">'+(x.self?'✓ 自行開車':'自行開車')+'</button>'
+          + '</div>'
+          + '<div class="mt" style="padding-left:32px'+(lack?';color:var(--danger)':'')+'">'
+          + esc((r && r.birth) || '缺生日') + ' · ' + esc((r && r.id) || '缺身分證') + '</div>'
+          + '</div>';
 }
 
 function summaryHtml(t){
@@ -984,7 +1007,9 @@ function rocTitle(t){
 
 function downloadExcel(){
   var t = trip();
-  var fees = t.fees, costs = t.costs, spons = t.sponsors;
+  var fees = t.fees.filter(function(x){ return !x.self; });
+  var selfs = t.fees.filter(function(x){ return x.self; });
+  var costs = t.costs, spons = t.sponsors;
 
   var right = costs.map(function(c){ return {kind:'item', name:c.name, amt:c.amount}; });
   right.push({kind:'gap'});
@@ -1019,6 +1044,18 @@ function downloadExcel(){
         : (String(rt.amt||'').trim() ? {v:num(rt.amt), n:true, s:XS.cell} : {v:'', s:XS.cell}));
     }
     rows.push({h:39, cells:cells});
+  }
+
+  if(selfs.length){
+    rows.push({h:20, cells:[]});
+    rows.push({h:39, cells:[{c:2, v:'自行開車', s:XS.head}, {v:'桌號', s:XS.head}, {v:'費用', s:XS.head}]});
+    selfs.forEach(function(fe, k){
+      rows.push({h:39, cells:[
+        {c:1, v:k+1, n:true, s:XS.idx},
+        {v:fe.name||'', s:XS.name},
+        {v:fe.table||'', s:XS.cell},
+        String(fe.due||'').trim() ? {v:num(fe.due), n:true, s:XS.cell} : {v:'', s:XS.cell}]});
+    });
   }
 
   (t.days||[]).forEach(function(d){
@@ -1349,7 +1386,10 @@ function viewSheet(t){
     + '<div class="grp"><div class="lbl">一、收費名單</div>'
     + '<div class="thead"><div class="c-no">＃</div><div class="c-nm">姓名</div>'
     + '<div class="c-gr">桌號</div><div class="c-r">費用</div><div class="c-r" style="width:44px">已繳</div></div>'
-    + (t.fees.length ? t.fees.map(function(x,i){
+    + (t.fees.length ? t.fees.filter(function(x){return !x.self;}).concat(['__SELF__'], t.fees.filter(function(x){return x.self;})).map(function(x,i,arr){
+        var cut = arr.indexOf('__SELF__');
+        if(x === '__SELF__') return cut < arr.length-1 ? '<div class="trow" style="font-weight:700;color:var(--accent-700)"><div>自行開車</div></div>' : '';
+        if(i > cut) i = i - cut - 1;
         return '<div class="trow"><div class="c-no">'+(i+1)+'</div>'
           + '<div class="c-nm">'+esc(x.name||'—')+'</div>'
           + '<div class="c-gr">'+esc(x.table||'—')+'</div>'
@@ -1586,7 +1626,7 @@ function refreshPudu(){
 }
 
 document.addEventListener('click', function(e){
-  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu],[data-move],[data-addtemple],[data-deltemple],[data-delday]');
+  var el = e.target.closest('[data-tab],[data-act],[data-add],[data-del],[data-self],[data-go],[data-trip],[data-paid],[data-pudupaid],[data-ungo],[data-deltrip],[data-pudugo],[data-delpudu],[data-move],[data-addtemple],[data-deltemple],[data-delday]');
   if(!el) return;
 
   if(el.dataset.tab){ S.tab = el.dataset.tab; S.screen = null; return render(); }
@@ -1695,6 +1735,13 @@ document.addEventListener('click', function(e){
     if(w) w.className = 'fee' + (pr.paid ? ' paid' : '');
     refreshPudu();
     return;
+  }
+
+  if(el.dataset.self !== undefined){
+    var tsf = trip(), rs = tsf.fees[+el.dataset.self];
+    rs.self = !rs.self;
+    save();
+    return render();
   }
 
   if(el.dataset.paid !== undefined){
